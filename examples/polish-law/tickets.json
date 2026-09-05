@@ -1,0 +1,68 @@
+[
+  {
+    "key": "LAW-1",
+    "title": "Zapis dokumentów prawnych i zasilenie demo offline",
+    "description": "## Cel\nStwórz najmniejszy wspólny magazyn dokumentów dla MVP wyszukiwarki polskiego prawa zgodnie z docs/request.md. Użyj Node ESM i lokalnej persystencji JSON.\n\n## Zakres\nZdefiniuj pola: source (NSA, SAOS, SN, TSUE, TK, ELI), sourceId, kind (orzeczenie lub akt prawny), title, documentDate, officialUrl, retrievedAt, text oraz opcjonalne court, caseNumber, legalArea, publicationReference i officialStatus. Zapis w trybie upsert po source + sourceId. Dane runtime trzymaj w ignorowanym katalogu data/. Dodaj powtarzalną komendę zasiewu demo z co najmniej dwoma jawnie syntetycznymi dokumentami na źródło, w tym ustawą, kodeksem i rozporządzeniem.\n\n## Kryteria akceptacji\n1. Po zasianiu, restarcie i ponownym odczycie wszystkie 12+ rekordów zachowują polskie znaki diakrytyczne.\n2. Ponowny zasiew nie zwiększa liczby rekordów; zmieniony tekst dla tego samego klucza aktualizuje rekord.\n3. Odrzucaj brakujące pola wymagane, niepoprawne daty i adresy URL inne niż HTTP(S); niepoprawny import nie może uszkodzić istniejącego magazynu. Zapisy wykonuj atomową podmianą pliku.\n4. Rekordy i wynik demo jednoznacznie oznaczają syntetyczne dane testowe; oryginalne URL-e i czasy pobrania przeżywają pełny cykl zapis–odczyt.\n5. pnpm test obejmuje trwałość między instancjami magazynu, idempotencję, aktualizacje i walidację; pnpm check przechodzi.\n\n## Scenariusz test-first\nZaimportuj jedno syntetyczne orzeczenie dwukrotnie, otwórz magazyn ponownie i sprawdź, że istnieje jeden rekord z najnowszym tekstem.\n\n## Poza zakresem\nPobieranie na żywo, interfejs użytkownika i serwer bazy danych.",
+    "comments": [],
+    "labels": ["selected"],
+    "state": "backlog",
+    "relations": [],
+    "projectName": "test-sdlc-app"
+  },
+  {
+    "key": "LAW-2",
+    "title": "Import najnowszych oficjalnych aktów prawnych przez ELI / Sejm",
+    "description": "## Cel\nPobierz najnowsze polskie akty prawne z oficjalnych źródeł ELI / Sejm, w tym Dziennik Ustaw i Monitor Polski. Przeczytaj docs/request.md.\n\n## Zakres\nZbadaj aktualną oficjalną dokumentację API, zaczynając od https://api.sejm.gov.pl/ i https://eli.gov.pl/. Zaimplementuj adapter aktów prawnych z trybem fixture i na żywo, domyślnie ostatnie 7 dni i limit 10 dokumentów na uruchomienie. Normalizuj referencje publikacji, oficjalne linki i daty do magazynu z LAW-1. Uwzględnij ustawy, kodeksy i rozporządzenia, gdy występują; kodeksy to akty prawne, a nie osobne nieoficjalne źródło. Zachowaj status oficjalny, jeśli jest podany; w przeciwnym razie nieznany. Wyekstrahuj dostępny tekst; gdy dostępny jest tylko nieobsługiwany PDF, zachowaj jego oficjalny link i pokaż status tekst-niedostępny zamiast zmyślać tekst.\n\n## Kryteria akceptacji\n1. Udokumentowana komenda importu obsługuje tryb fixture/na żywo, zakres dat i limit.\n2. Odpowiedzi offline obejmujące oba dzienniki normalizują się poprawnie, w tym przykład ustawy/kodeksu i rozporządzenie.\n3. Powtarzane importy działają jak upsert bez duplikatów; paginacja respektuje limit uruchomienia i granice dat.\n4. Timeouty, błędy HTTP i zniekształcone odpowiedzi zwracają błąd specyficzny dla źródła bez utraty istniejących dokumentów.\n5. Testy działają bez sieci i obejmują normalizację, granice, aktualizacje duplikatów i obsługę błędów. Zapisz użyte oficjalne endpointy i wynik testu dymnego na żywo albo precyzyjną blokadę dostępu.\n\n## Scenariusz test-first\nZaimportuj dwie strony fixture dwukrotnie i sprawdź unikalne ID publikacji, poprawne oficjalne linki oraz żądane granice dat i limitu.",
+    "comments": [],
+    "labels": ["selected"],
+    "state": "backlog",
+    "relations": [{ "kind": "blocked-by", "key": "LAW-1", "state": "backlog" }],
+    "projectName": "test-sdlc-app"
+  },
+  {
+    "key": "LAW-3",
+    "title": "Dodaj ograniczone adaptery orzeczeń dla NSA, SAOS, SN, TSUE i TK",
+    "description": "## Cel\nZbierz małą, niedawną próbkę oficjalnych orzeczeń ze wszystkich pięciu żądanych źródeł. Skorzystaj z URL-i odkrywania i zakresu opisanego w docs/request.md.\n\n## Zakres\nStwórz wspólny interfejs adapterów i po jednym adapterze na źródło. Preferuj udokumentowane publiczne API; w przeciwnym razie ograniczone pobieranie oficjalnego HTML/PDF. Każdy adapter ma deterministyczne fixture offline i punkt wejścia na żywo, domyślnie ostatnie 7 dni, konfigurowalny zakres i domyślny limit 10. Zachowuj ID źródła, oficjalne URL-e, sąd, sygnaturę, datę orzeczenia, polski tekst tam, gdzie jest dostępny, i znaczniki czasu pobrania. Nie wnioskuj brakujących dziedzin prawa ani siły precedensu.\n\n## Kryteria akceptacji\n1. Komenda wybiera jedno źródło lub wszystkie pięć oraz tryb fixture/na żywo.\n2. Każdy adapter normalizuje co najmniej dwa syntetyczne fixture w kształcie źródła do schematu z LAW-1; fixture są oznaczone jako syntetyczne i dokumentują format nadrzędny.\n3. Rejestr raportuje osobno dla każdego źródła: zaimplementowany, niedostępny lub nieobsługiwany dostęp na żywo. Żadna ścieżka na żywo nie podstawia po cichu danych demo.\n4. Powtarzane importy są idempotentne per źródło; identyczne sygnatury z różnych źródeł zachowują pochodzenie.\n5. Żądania mają timeout, maksymalnie dwie próby ponowienia, co najmniej sekundę przerwy między żądaniami do hosta i łączny limit dokumentów per źródło. Nieobsługiwane formaty zachowują oficjalny link i jawny status tekst-niedostępny.\n6. Testy kontraktowe adapterów bez dostępu do sieci obejmują każde źródło, zniekształcone odpowiedzi, limity i błędy. Zapisz zweryfikowane oficjalne endpointy i wyniki testów dymnych na żywo; jeśli dostęp blokuje adapter, zgłoś precyzyjną blokadę zamiast twierdzić, że wszystkie źródła na żywo są gotowe.\n\n## Scenariusz test-first\nUruchom wszystkie pięć adapterów fixture dwukrotnie i sprawdź dziesięć rekordów z atrybucją źródła; spraw, by jeden adapter zawiódł, i zweryfikuj, że pozostałe źródła nadal się importują.\n\n## Poza zakresem\nHistoryczne crawlowanie, dopasowywanie encji między źródłami, OCR i ranking semantyczny.",
+    "comments": [],
+    "labels": ["selected"],
+    "state": "backlog",
+    "relations": [{ "kind": "blocked-by", "key": "LAW-1", "state": "backlog" }],
+    "projectName": "test-sdlc-app"
+  },
+  {
+    "key": "LAW-4",
+    "title": "Okresowe importy przyrostowe i widoczna świeżość źródeł",
+    "description": "## Cel\nUtrzymuj lokalny korpus świeżym, gdy aplikacja działa, i czynij widocznymi błędy pozyskiwania danych.\n\n## Zakres\nPodłącz adaptery z LAW-2/3 do schedulerza wewnątrz procesu, domyślnie co 24 godziny z konfigurowalnym interwałem. Dodaj ręczne odświeżenie (akcja/endpoint) i endpoint statusu źródeł. Zapisuj per źródło: ostatnią próbę, ostatni sukces, błąd, liczbę zaimportowanych dokumentów i udany checkpoint. Pobierz przyrostowo z jednodniowym zakładem, deduplikując przez magazyn. Zachowaj limity per uruchomienie i udokumentuj pokrycie jako niedawną próbkę.\n\n## Kryteria akceptacji\n1. Z wstrzykniętym zegarem przesunięcie o jeden interwał uruchamia wszystkie włączone adaptery dokładnie raz; ręczne odświeżenie wyzwala tę samą usługę.\n2. Równoczesne wyzwolenia z timera i ręczne nie nakładają się na aktywny import.\n3. Awaria jednego źródła nie zatrzymuje pozostałych; jego checkpoint pozostaje bez zmian, a błąd jest ujawniony.\n4. Restart przeładowuje udane checkpointy; nieudana albo ucięta/niekompletna partia nigdy nie przesuwa się poza nieprzetworzone rekordy.\n5. Tryb fixture używa wyłącznie adapterów fixture i jest widocznie raportowany w statusie. Testy obejmują timing, zapobieganie nakładaniu, restart, izolację awarii i obsługę checkpointów bez sieci i prawdziwego czekania.\n6. README wyjaśnia, że proces musi pozostać uruchomiony, jak skonfigurować interwał/tryb i jak odświeżyć ręcznie.\n\n## Scenariusz test-first\nWyzwól dwa równoczesne odświeżenia z jednym zawodzącym źródłem i sprawdź jedną aktywną partię, pięć udanych statusów źródeł oraz jeden niezmieniony checkpoint źródła, które zawiodło.",
+    "comments": [],
+    "labels": ["selected"],
+    "state": "backlog",
+    "relations": [
+      { "kind": "blocked-by", "key": "LAW-2", "state": "backlog" },
+      { "kind": "blocked-by", "key": "LAW-3", "state": "backlog" }
+    ],
+    "projectName": "test-sdlc-app"
+  },
+  {
+    "key": "LAW-5",
+    "title": "Polska strona wyszukiwania i szczegóły dokumentów z linkiem do źródła",
+    "description": "## Cel\nUczyń zapisany korpus przeglądalnym w prostym polskim interfejsie zainspirowanym zrzutem ekranu opisanym w docs/request.md.\n\n## Zakres\nCzysty HTML/CSS/JS, ciepłe kremowe tło, granatowy szeryfowy nagłówek, szerokie pole wyszukiwania, boczny panel filtrów na desktopie i białe karty z obramowaniem. Szukaj w tytule, sygnaturze i dostępnym tekście dopasowaniem słów kluczowych bez rozróżniania wielkości liter (wszystkie słowa zapytania muszą pasować). Filtruj po źródle, rodzaju (orzeczenie/akt prawny) i inkluzywnym zakresie dat; łącz filtry przez AND, wybrane źródła przez OR. Sortuj od najnowszych ze stabilnym tie-break po ID źródła; stronicuj po 20 na stronę. Widok szczegółów pokazuje tekst albo status tekst-niedostępny, metadane i oficjalny link.\n\n## Kryteria akceptacji\n1. Zasiew demo renderuje wyniki ze wszystkich sześciu źródeł z czytelnym banerem danych syntetycznych i prawdziwymi licznikami z magazynu.\n2. Filtry słów kluczowych, wielu źródeł, rodzaju i dat składają się poprawnie; reset przywraca wszystkie wyniki, a zmiana filtrów resetuje paginację.\n3. Karty wyników pokazują tytuł/sygnaturę, źródło, datę i dostępne sąd/referencję; szczegóły zachowują polski tekst i oficjalne linki.\n4. Stany ładowania, braku wyników i nieudanego żądania mają polskie komunikaty. Brakujące metadane są pomijane lub oznaczone jako nieznane, nigdy zmyślone.\n5. Przy szerokości 375px filtry układają się w kolumnę nad wynikami bez poziomego przepełnienia; wyszukiwanie i filtry mają etykiety i obsługę klawiatury. Renderuj zaimportowany tekst jako tekst, nie jako wykonywalny HTML.\n6. Testy API obejmują połączone filtry, granice dat i stabilną paginację; przeglądarkowy test akceptacyjny obejmuje ścieżkę zasiew -> wyszukiwanie -> filtr -> szczegóły -> oficjalny link, w tym fixture z wstrzyknięciem HTML.\n\n## Poza zakresem\nPrzełącznik wyszukiwania AI, streszczenia, oceny precedensów, uwierzytelnianie i subskrypcje.",
+    "comments": [],
+    "labels": ["selected"],
+    "state": "backlog",
+    "relations": [{ "kind": "blocked-by", "key": "LAW-1", "state": "backlog" }],
+    "projectName": "test-sdlc-app"
+  },
+  {
+    "key": "LAW-6",
+    "title": "Weryfikacja kompletnej aplikacji offline i gotowości źródeł na żywo",
+    "description": "## Cel\nZapewnij powtarzalny przebieg akceptacji end-to-end dla MVP wyszukiwarki prawa powstałego z pracy konduktora.\n\n## Zakres\nPołącz świeżość źródeł i ręczne odświeżenie z LAW-4 z interfejsem z LAW-5. Dodaj udokumentowane demo offline uruchamiane jedną komendą oraz zestaw testów akceptacyjnych startujących z pustego, izolowanego katalogu danych. Opublikuj macierz źródeł rozróżniającą zweryfikowany import na żywo, zachowanie tylko-fixture i zablokowany dostęp, z datami weryfikacji.\n\n## Kryteria akceptacji\n1. Czysty checkout potrafi uruchomić udokumentowane demo offline bez kluczy API i pokazać zarówno akty prawne, jak i orzeczenia ze wszystkich sześciu źródeł.\n2. Przebieg akceptacji importuje fixture, wyszukuje orzeczenie oraz ustawę/kodeks, otwiera szczegóły, odświeża dwukrotnie bez duplikatów, restartuje i potwierdza trwałość danych.\n3. Wymuś awarię jednego źródła: UI pokazuje ostatni sukces i zrozumiały błąd, podczas gdy istniejące wyniki i inne źródła pozostają użyteczne.\n4. pnpm check i pnpm test przechodzą; udokumentuj osobną komendę testów przeglądarkowych, jeśli istnieje. Dane testowe używają izolowanych katalogów tymczasowych.\n5. README dokumentuje komendy importu na żywo i schedulerza, ograniczone pokrycie, linki do źródeł, ograniczenia tekstu/PDF oraz precyzyjną macierz gotowości per źródło. Bez twierdzeń o wyczerpującym pokryciu polskiego prawa ani zweryfikowanej mocy prawnej.\n\n## Scenariusz test-first\nOd pustego magazynu uruchom pozyskiwanie fixture, zrestartuj aplikację, wyszukaj znany tytuł aktu i sprawdź jego oficjalny link do źródła oraz widoczny znacznik świeżości źródła.",
+    "comments": [],
+    "labels": ["selected"],
+    "state": "backlog",
+    "relations": [
+      { "kind": "blocked-by", "key": "LAW-4", "state": "backlog" },
+      { "kind": "blocked-by", "key": "LAW-5", "state": "backlog" }
+    ],
+    "projectName": "test-sdlc-app"
+  }
+]

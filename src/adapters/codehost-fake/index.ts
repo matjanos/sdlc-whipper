@@ -40,6 +40,12 @@ export class FakeCodeHost implements CodeHost {
     return { ...pr }
   }
 
+  async findOpenPR(head: string, base: string): Promise<PullRequest | undefined> {
+    this.calls.push({ op: "findOpenPR", args: [head, base] })
+    const pr = [...this.prs.values()].find((candidate) => candidate.state === "open" && candidate.headRef === head && candidate.baseRef === base)
+    return pr ? { ...pr } : undefined
+  }
+
   async waitForChecks(number: number, _timeoutMs: number): Promise<CheckStatus> {
     this.calls.push({ op: "waitForChecks", args: [number] })
     this.polls += 1

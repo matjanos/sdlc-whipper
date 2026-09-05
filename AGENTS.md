@@ -30,4 +30,4 @@ A deterministic conductor orchestrating LLM agents through an autonomous SDLC pi
 
 ## Current state (be honest in PRs)
 
-M1+M2 skeleton: plumbing and contracts are real and tested; **prompts are stub-grade by design** until M4. The OpenCode runtime's event/message extraction is defensive and needs the M2 spike verification against a live server (`/openapi.json`) before cost attribution (`costUsd`) is trustworthy.
+M1+M2 skeleton plus M3 plumbing hardening: ports, contracts, PR idempotency, GitHub checks, and Vercel preview observation are real and tested; **prompts are stub-grade by design** until M4. The OpenCode runtime's event/message extraction is defensive and needs the M2 spike verification against a live server (`/openapi.json`) before cost attribution (`costUsd`) is trustworthy. A real deployed target-repo PR is still required to close M3.

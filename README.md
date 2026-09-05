@@ -39,6 +39,8 @@ pnpm sdlc ledger --config <repo>/.sdlc/config.json
 
 ### For real (against your repo + Linear + GitHub + Vercel)
 
+For a concrete six-ticket offline backlog and sibling test app, see [the Polish-law test request](examples/polish-law/README.md).
+
 1. **Target repo**: copy [`examples/sdlc.config.json`](examples/sdlc.config.json) to `<repo>/.sdlc/config.json`, set `tracker.team`, `preview.project`, and the models. Gitignore `.sdlc/runs/`, `.sdlc/state.json`, `.ledger/`, and your worktrees directory.
 2. **Auth**: `LINEAR_API_KEY` (graph adapter) or `LINEAR_MCP_TOKEN` (MCP adapter) · `gh auth login` · model-provider keys live in your opencode user config (the embedded SDK host reuses them).
 3. **Observe first**: `pnpm sdlc status` — read-only, shows every candidate, blocker, and what a tick would do.
@@ -119,7 +121,7 @@ examples/sdlc.config.json
 
 - **M1 ✅** `sdlc status` — read-only reconciliation.
 - **M2 ✅** engine: SDK host, agent registry (7 agents, real permission sets), ledger, budget, dry-run; full pipeline walks offline (fake) and is wired for real.
-- **M3 ⬜** live plumbing proof: PAT/App PR creation that triggers the target repo's preview pipeline, preview-ready detection end-to-end, one real trivial PR.
+- **M3 🟡** PR plumbing is now hardened and contract-tested: uncommitted executor edits are committed/pushed, reruns reuse an existing open PR, GitHub checks are polled, and Vercel preview readiness has URL-probe + MCP deployment-state adapters. Remaining: run one real PR against a deployed target repo and verify preview/Neon teardown.
 - **M4 ⬜** real prompts per phase (the ones in `prompts/` are deliberately stub-grade), enabled one phase at a time behind flags.
 - **Spikes**: verify OpenCode SDK event/message shapes against `/openapi.json` (cost attribution + robust text extraction); embedded-host MCP auth inheritance; PAT vs GitHub App for agent PRs.
 

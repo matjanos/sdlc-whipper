@@ -97,6 +97,26 @@ export class GitHubCodeHost implements CodeHost {
     return normalize(JSON.parse(out) as GhPR)
   }
 
+  async findOpenPR(head: string, base: string): Promise<PullRequest | undefined> {
+    const out = await this.gh([
+      "pr",
+      "list",
+      ...this.repoArgs(),
+      "--head",
+      head,
+      "--base",
+      base,
+      "--state",
+      "open",
+      "--limit",
+      "1",
+      "--json",
+      "number,url,headRefName,baseRefName,state,statusCheckRollup,reviewDecision",
+    ])
+    const prs = JSON.parse(out) as GhPR[]
+    return prs[0] ? normalize(prs[0]) : undefined
+  }
+
   async waitForChecks(number: number, timeoutMs: number): Promise<CheckStatus> {
     const deadline = Date.now() + timeoutMs
     for (;;) {

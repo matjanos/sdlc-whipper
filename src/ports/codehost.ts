@@ -15,6 +15,9 @@ export interface OpenPRInput {
 export interface CodeHost {
   openPR(input: OpenPRInput): Promise<PullRequest>
 
+  /** Find an existing open PR for an idempotent rerun of a delivery. */
+  findOpenPR(head: string, base: string): Promise<PullRequest | undefined>
+
   getPR(number: number): Promise<PullRequest>
 
   /** Poll until checks finish or timeout. Returns final status; never throws on red checks. */
