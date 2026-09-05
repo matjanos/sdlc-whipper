@@ -1,0 +1,128 @@
+# sdlc-conductor
+
+A deterministic conductor for an autonomous software delivery pipeline: backlog grooming → acceptance-test-first planning → implementation → bounded review loops → preview-environment testing → PR. LLM agents (via [OpenCode](https://opencode.ai)) do the thinking; this program owns every loop, budget, and side effect.
+
+Humans stay in the loop where it matters: unclear tickets get questions on the ticket, and **merging stays human-only**.
+
+```
+                    ┌────────────────────────────────────────────┐
+                    │                CONDUCTOR                    │
+                    │  (deterministic TS, no product LLM calls)   │
+   cron / manual ─▶ │  tick: reconcile → dispatch → record        │
+                    │  pipelines (data) · budgets · escalation    │
+                    └──────┬──────────────┬──────────────┬───────┘
+                  AgentRuntime      TicketTracker    CodeHost
+                  (OpenCode SDK)     (Linear)        (GitHub/gh)
+                    7 agent sessions       │              │
+                    groomer·split·researcher·council     ▼
+                    executor·reviewer·tester      PRs/checks/reviews
+                                              PreviewEnvironment
+                                              (Vercel + Neon via the target
+                                               repo's preview pipeline)
+```
+
+## Quickstart
+
+```sh
+pnpm install
+pnpm test            # 29 tests: tick flow, firewall, loops, budget, adapters
+```
+
+### Offline demo (no keys, no network)
+
+```sh
+# any throwaway git repo with a .sdlc/config.json using the fake adapters
+pnpm sdlc status --config <repo>/.sdlc/config.json
+SDL_FAKE_TICKETS=./demo-tickets.json pnpm sdlc tick --config <repo>/.sdlc/config.json
+pnpm sdlc ledger --config <repo>/.sdlc/config.json
+```
+
+### For real (against your repo + Linear + GitHub + Vercel)
+
+1. **Target repo**: copy [`examples/sdlc.config.json`](examples/sdlc.config.json) to `<repo>/.sdlc/config.json`, set `tracker.team`, `preview.project`, and the models. Gitignore `.sdlc/runs/`, `.sdlc/state.json`, `.ledger/`, and your worktrees directory.
+2. **Auth**: `LINEAR_API_KEY` (graph adapter) or `LINEAR_MCP_TOKEN` (MCP adapter) · `gh auth login` · model-provider keys live in your opencode user config (the embedded SDK host reuses them).
+3. **Observe first**: `pnpm sdlc status` — read-only, shows every candidate, blocker, and what a tick would do.
+4. **Dry run**: `pnpm sdlc tick --dry-run` — full pipeline, zero side effects.
+5. **Go live**: `pnpm sdlc tick` (or `sdlc deliver LIN-123` for one ticket).
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `sdlc status [--json]` | Read-only reconciliation: ready / blocked / needs-info / in-flight, with reasons |
+| `sdlc tick [--dry-run] [--runtime fake] [--no-groom]` | One reconcile-dispatch-record cycle (file-locked, crash-safe) |
+| `sdlc deliver <KEY>` | Run the delivery pipeline for one ticket, selected or not |
+| `sdlc ledger [--ticket KEY] [--by ticket\|phase\|run\|agent]` | Cost/token rollups per ticket, phase, run, or agent |
+
+## Ports & adapters
+
+The core speaks five ports and zero vendor names. Swapping a vendor = writing an adapter that passes the same contract tests + flipping config.
+
+| Port | Default | Alternatives | Notes |
+|---|---|---|---|
+| `TicketTracker` | `linear` (GraphQL, API key) | `linear-mcp` (Linear's remote MCP, bearer token — one auth story for agents + conductor), `fake` | Jira would slot in here; contract in `test/tracker-contract.spec.ts` |
+| `CodeHost` | `github` (`gh` CLI) | `fake` | PRs, checks, the tester's approval |
+| `PreviewEnvironment` | `vercel` (URL probe) | `vercel-mcp` (real deployment state via Vercel MCP, probe fallback), `fake` | Observation-first: your repo's pipeline owns provisioning/teardown; Railway PR environments would implement `provision()` |
+| `AgentRuntime` | `opencode` (SDK embedded host) | `fake` (scripted, offline) | Agents are injected into each task worktree as `.opencode/opencode.json` — never committed, target repos stay untouched |
+| `LedgerStore` | `ledger-jsonl` | — | One line per model call, tagged run/ticket/phase/agent |
+
+```jsonc
+// .sdlc/config.json (adapter selection)
+{ "adapters": { "tracker": "linear-mcp", "codehost": "github", "preview": "vercel-mcp", "runtime": "opencode" } }
+```
+
+## The pipeline (data, not code)
+
+`src/conductor/pipelines.ts` — reorder, gate (`when`), or insert steps without touching the runner:
+
+```
+split → research → [council if confidence=low] → execute ⇄ review (≤3 rounds) → publish → await-preview → test
+```
+
+- **Bounded loops in code**: the executor↔reviewer loop runs at most `budget.maxLoopRounds`; stalemates escalate both sides to the ticket. An LLM never decides when to stop.
+- **Context firewall** (asserted by `test/firewall.spec.ts`): the reviewer gets ticket + diff and *never* the plan; the council gets questions + plan and never the ticket; the tester never sees the plan. Prompt assembly lives in exactly one place per phase.
+- **Acceptance-test-first**: `split` defines a failing test before anything is built — it is the objective definition of done for the executor, the reviewer, CI, and the tester.
+- **Escalation**: `needs-info`, `stalemate`, `budget-exceeded`, `test-failed`, `phase-error` — one editable comment per tag on the ticket, never spam.
+
+## Budgets & ledger
+
+Every model call is recorded with run/ticket/phase/agent tags. Before each prompt the conductor asserts the per-task budget (`perTaskUsd` / `perTaskTokens`) and kills sessions (`interruptAll`) + escalates when exceeded. `sdlc ledger` answers "what did delivering LIN-123 cost?".
+
+Cost attribution needs model pricing: token counts are recorded now; `costUsd` fills in once the SDK event shape is verified (see roadmap).
+
+## Extending
+
+- **Add a phase**: implement `Phase` in `src/phases/`, register it in `registry.ts`, add a step (with `when`/`loopWith` if needed) to the pipeline array. Golden-test its prompt assembly.
+- **Swap the tracker (Jira)**: new `src/adapters/tracker-jira/` passing the contract suite; flip `adapters.tracker` + `tracker.map` in config. Logical markers (`selected`, `needsInfo`) map to whatever Jira uses.
+- **Swap previews (Railway)**: adapter implementing `provision()` + `waitForReady()`; flip `adapters.preview`.
+- **Move off your laptop**: all I/O goes through env/config — deploy as a container (Railway service/VM) with the same env; nothing else changes.
+- **Observability intake**: webhook → `tracker.createIssue()` → the same pipeline.
+
+## Repo layout
+
+```
+src/
+  cli.ts                 # sdlc status | tick | deliver | ledger
+  config.ts              # zod-validated .sdlc/config.json + selector mapping
+  types.ts               # domain vocabulary (no vendor types)
+  ports/                 # the 5 interfaces
+  adapters/              # linear · linear-mcp · github · vercel · vercel-mcp · opencode · fakes · ledger
+  conductor/             # tick loop, pipeline runner, budget, escalation, actions (dry-run-aware)
+  phases/                # one file per phase + registry/base
+  git/                   # worktrees, diff, commit, push
+prompts/                 # agents/*.md (system prompts) · phases/*.md (task templates) — versioned here
+test/                    # tick · firewall · loop · council · budget · config · tracker contract · linear-mcp
+examples/sdlc.config.json
+```
+
+## Roadmap & known spikes
+
+- **M1 ✅** `sdlc status` — read-only reconciliation.
+- **M2 ✅** engine: SDK host, agent registry (7 agents, real permission sets), ledger, budget, dry-run; full pipeline walks offline (fake) and is wired for real.
+- **M3 ⬜** live plumbing proof: PAT/App PR creation that triggers the target repo's preview pipeline, preview-ready detection end-to-end, one real trivial PR.
+- **M4 ⬜** real prompts per phase (the ones in `prompts/` are deliberately stub-grade), enabled one phase at a time behind flags.
+- **Spikes**: verify OpenCode SDK event/message shapes against `/openapi.json` (cost attribution + robust text extraction); embedded-host MCP auth inheritance; PAT vs GitHub App for agent PRs.
+
+## Safety model
+
+Merging is human-only. Agents run least-privilege (reviewer/council: no edit, no shell; executor: no `git push` — the conductor pushes). All state is reconstructable from the tracker + git, so crashes are free. One escalation comment per topic per ticket.

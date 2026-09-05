@@ -1,0 +1,52 @@
+{
+  "adapters": {
+    "tracker": "linear",
+    "codehost": "github",
+    "preview": "vercel",
+    "runtime": "opencode"
+  },
+  "repo": { "baseBranch": "main", "branchPrefix": "sdlc/" },
+  "worktrees": { "directory": "../worktrees" },
+  "tracker": {
+    "team": "LIN",
+    "map": {
+      "selected": "label:sdlc-selected",
+      "needsInfo": "label:needs-info",
+      "inProgress": "state:In Progress",
+      "inReview": "state:In Review",
+      "done": "state:Done",
+      "cancelled": "state:Canceled"
+    }
+  },
+  "preview": {
+    "urlTemplate": "https://pr-{n}-{project}.vercel.app",
+    "project": "payload-website-starter",
+    "readyTimeoutMs": 900000,
+    "pollMs": 10000
+  },
+  "models": {
+    "reasoner": "anthropic/claude-sonnet-4-5#high",
+    "workhorse": "anthropic/claude-haiku-4"
+  },
+  "agents": {
+    "groomer": { "model": "reasoner" },
+    "split": { "model": "reasoner" },
+    "researcher": { "model": "reasoner" },
+    "council": { "model": "reasoner" },
+    "executor": { "model": "workhorse" },
+    "reviewer": { "model": "reasoner" },
+    "tester": { "model": "workhorse" }
+  },
+  "budget": {
+    "maxParallelDeliveries": 2,
+    "perTaskUsd": 15,
+    "perTaskTokens": 4000000,
+    "maxLoopRounds": 3
+  },
+  "phases": {
+    "groom": { "enabled": false, "cadenceMinutes": 60 },
+    "test": { "enabled": true }
+  },
+  "ledger": { "directory": ".ledger" },
+  "dryRun": false
+}

@@ -1,0 +1,33 @@
+{
+  "name": "sdlc-conductor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deterministic conductor for an autonomous SDLC pipeline (groom → plan → implement → review → test → PR) driven by LLM agents behind ports/adapters.",
+  "type": "module",
+  "bin": {
+    "sdlc": "dist/cli.js"
+  },
+  "main": "dist/cli.js",
+  "scripts": {
+    "sdlc": "tsx src/cli.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@opencode-ai/sdk": "0.0.0-dev-19156",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  },
+  "packageManager": "pnpm@10.32.1+sha512.a706938f0e89ac1456b6563eab4edf1d1faf3368d1191fc5c59790e96dc918e4456ab2e67d613de1043d2e8c81f87303e6b40d4ffeca9df15ef1ad567348f2be"
+}

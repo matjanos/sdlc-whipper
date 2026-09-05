@@ -1,0 +1,195 @@
+import type { AgentRuntime, LedgerStore, PromptOptions, RunContext } from "../../ports/index.js"
+import type { AgentRole, LedgerEntry, PromptParts } from "../../types.js"
+import { writeWorktreeAgentConfig, agentId } from "./agents.js"
+
+/**
+ * Structural types for the beta @opencode-ai/sdk. Kept local on purpose: the
+ * SDK is beta and its types churn; if a field moves, only this file changes.
+ * (M2 spike: verify event/message shapes against the running server's
+ * /openapi.json — extractors below are deliberately defensive.)
+ */
+interface SdkSessionInfo {
+  id: string
+}
+interface SdkSessions {
+  create(input: { location: { directory: string }; title?: string }): Promise<SdkSessionInfo>
+  switchAgent(input: { sessionID: string; agent: string }): Promise<void>
+  prompt(input: { sessionID: string; text: string }): Promise<unknown>
+  wait(input: { sessionID: string }): Promise<void>
+  context(input: { sessionID: string }): Promise<readonly unknown[]>
+  interrupt(input: { sessionID: string; continue: boolean }): Promise<void>
+}
+interface SdkEvents {
+  subscribe(options?: { signal?: AbortSignal }): AsyncIterable<unknown>
+}
+interface SdkHost {
+  sessions: SdkSessions
+  events: SdkEvents
+  close(): Promise<void>
+}
+
+export interface OpenCodeRuntimeOptions {
+  /** Resolved target-repo config — used to inject agent definitions into worktrees. */
+  config: Parameters<typeof writeWorktreeAgentConfig>[0]
+  /** Directory sessions run in when the run has no worktree (grooming). */
+  fallbackDirectory?: string
+  ledger?: LedgerStore
+}
+
+/**
+ * AgentRuntime over the OpenCode SDK embedded host. One host per runtime
+ * instance; sessions keyed by role so follow-ups (executor review rounds)
+ * reuse context, while `fresh: true` (reviewer rounds) starts clean.
+ *
+ * Agent definitions are injected into the run's worktree as
+ * `.opencode/opencode.json` (never committed) — target repos need no
+ * `.opencode/agents/` entries. The user's global opencode config still
+ * applies (providers, MCP servers like Linear).
+ */
+export class OpenCodeRuntime implements AgentRuntime {
+  private host?: SdkHost
+  private run?: RunContext
+  private readonly sessions = new Map<AgentRole, string>() // role → sessionID
+  private closed = false
+
+  constructor(private readonly opts: OpenCodeRuntimeOptions) {}
+
+  private directory(): string {
+    return this.run?.worktree ?? this.opts.fallbackDirectory ?? process.cwd()
+  }
+
+  private async ensureHost(): Promise<SdkHost> {
+    if (this.host) return this.host
+    const mod = (await import("@opencode-ai/sdk")) as unknown as {
+      OpenCode: { create(opts?: { plugins?: unknown[] }): Promise<SdkHost> }
+    }
+    this.host = await mod.OpenCode.create()
+    void this.consumeEvents().catch(() => undefined)
+    return this.host
+  }
+
+  async open(run: RunContext): Promise<void> {
+    this.run = run
+    this.sessions.clear()
+    this.closed = false
+    if (run.worktree) {
+      writeWorktreeAgentConfig(this.opts.config, run.worktree)
+    }
+    await this.ensureHost()
+  }
+
+  private async sessionFor(role: AgentRole, fresh: boolean): Promise<string> {
+    const host = await this.ensureHost()
+    const existing = this.sessions.get(role)
+    if (existing && !fresh) return existing
+    const session = await host.sessions.create({
+      location: { directory: this.directory() },
+      title: `sdlc:${this.run?.ticket ?? "?"}:${role}`,
+    })
+    this.sessions.set(role, session.id)
+    return session.id
+  }
+
+  async prompt(role: AgentRole, parts: PromptParts, opts?: PromptOptions): Promise<string> {
+    const host = await this.ensureHost()
+    const sessionID = await this.sessionFor(role, opts?.fresh === true)
+    await host.sessions.switchAgent({ sessionID, agent: agentId(role) })
+    const text = parts.attachFiles?.length
+      ? `${parts.text}\n\nAttached context files: ${parts.attachFiles.join(", ")}`
+      : parts.text
+    await host.sessions.prompt({ sessionID, text })
+    await host.sessions.wait({ sessionID })
+    const messages = await host.sessions.context({ sessionID })
+    return lastAssistantText(messages)
+  }
+
+  async interrupt(role: AgentRole): Promise<void> {
+    const sessionID = this.sessions.get(role)
+    if (!sessionID || !this.host) return
+    try {
+      await this.host.sessions.interrupt({ sessionID, continue: false })
+    } catch {
+      /* session may already be finished */
+    }
+  }
+
+  async interruptAll(): Promise<void> {
+    for (const role of this.sessions.keys()) await this.interrupt(role)
+  }
+
+  async close(): Promise<void> {
+    this.closed = true
+    this.sessions.clear()
+    if (this.host) {
+      const host = this.host
+      this.host = undefined
+      await host.close().catch(() => undefined)
+    }
+  }
+
+  /**
+   * Ledger feed: stream server events, pick token-usage-carrying messages,
+   * attribute them to this run's roles via the sessionID→role map.
+   * Event payload shape is defensive by design (M2 spike verifies it).
+   */
+  private async consumeEvents(): Promise<void> {
+    const host = this.host
+    if (!host || !this.opts.ledger || !this.run) return
+    const roleBySession = new Map<string, AgentRole>()
+    try {
+      for await (const raw of host.events.subscribe()) {
+        if (this.closed || !this.host) break
+        const ev = raw as Record<string, any>
+        const sessionID: string | undefined = ev.sessionID ?? ev.info?.sessionID ?? ev.properties?.sessionID
+        if (sessionID) {
+          for (const [role, sid] of this.sessions) if (sid === sessionID) roleBySession.set(sid, role)
+        }
+        const tokens = ev.tokens ?? ev.usage ?? ev.info?.tokens ?? ev.info?.usage
+        if (!tokens || typeof tokens !== "object") continue
+        const input = Number(tokens.input ?? tokens.inputTokens ?? 0)
+        const output = Number(tokens.output ?? tokens.outputTokens ?? 0)
+        if (input + output === 0) continue
+        const role = (sessionID ? roleBySession.get(sessionID) : undefined) ?? "groomer"
+        const entry: LedgerEntry = {
+          runId: this.run.runId,
+          ticket: this.run.ticket,
+          phase: "tick",
+          agent: role,
+          model: typeof ev.model === "string" ? ev.model : ev.info?.model,
+          ts: new Date().toISOString(),
+          tokens: {
+            input,
+            output,
+            cacheRead: Number(tokens.cacheRead ?? tokens.cache_read ?? 0) || undefined,
+            cacheWrite: Number(tokens.cacheWrite ?? tokens.cache_write ?? 0) || undefined,
+          },
+          costUsd: null, // pricing: read from the model catalog once the event shape is verified (M2 spike)
+          sessionId: sessionID,
+        }
+        await this.opts.ledger.record(entry)
+      }
+    } catch {
+      // event stream ended or host closed — nothing to do
+    }
+  }
+}
+
+/** Defensive extraction of the last assistant message text across SDK shapes. */
+export function lastAssistantText(messages: readonly unknown[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i] as Record<string, any>
+    const role = msg.role ?? msg.info?.role
+    if (role !== "assistant") continue
+    if (typeof msg.text === "string" && msg.text.trim()) return msg.text
+    const parts = msg.parts ?? msg.info?.parts
+    if (Array.isArray(parts)) {
+      const text = parts
+        .filter((p: any) => (p.type ?? p.kind) === "text" && typeof (p.text ?? "") === "string")
+        .map((p: any) => p.text)
+        .join("\n")
+        .trim()
+      if (text) return text
+    }
+  }
+  throw new Error("opencode runtime: no assistant message in session context (session may have failed)")
+}
