@@ -11,6 +11,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(zod@3.25.76)
+      '@opencode-ai/client':
+        specifier: 0.0.0-dev-19156
+        version: 0.0.0-dev-19156(effect@4.0.0-rc.112)
       '@opencode-ai/sdk':
         specifier: 0.0.0-dev-19156
         version: 0.0.0-dev-19156(@aws-sdk/credential-provider-node@3.972.82)(@opentelemetry/api-logs@0.214.0)(@opentelemetry/api@1.9.0)(@opentelemetry/resources@2.6.1(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-logs@0.214.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-metrics@2.6.1(@opentelemetry/api@1.9.0))(@opentelemetry/semantic-conventions@1.43.0)(@opentui/core@0.5.10(typescript@5.9.3)(web-tree-sitter@0.25.10))(@smithy/signature-v4@5.7.3)(ai@6.0.277(zod@3.25.76))(graphql@16.14.2)(redis@6.2.1(@opentelemetry/api@1.9.0))(typescript@5.9.3)(web-tree-sitter@0.25.10)(ws@8.21.3)(zod@3.25.76)

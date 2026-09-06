@@ -3,6 +3,7 @@ import { loadPhases } from "../phases/registry.js"
 import type { PhaseName } from "../types.js"
 import type { ConductorDeps, Outcomes, TaskContext } from "./deps.js"
 import { escalate } from "./actions.js"
+import { withTransientRetry } from "./retry.js"
 import { BudgetExceededError, EscalationError, type RunStatus } from "../types.js"
 import { VerdictParseError } from "../phases/shared.js"
 
@@ -51,7 +52,10 @@ async function runLLMPhase(
   if (!phase.role || !phase.input) throw new Error(`${phase.name}: not an LLM phase`)
   const parts = await phase.input(task, outcomes)
   await deps.budget.assert(task.runId)
-  const output = await deps.runtime.prompt(phase.role, parts, { fresh: opts.fresh })
+  const output = await withTransientRetry(
+    () => deps.runtime.prompt(phase.role!, parts, { fresh: opts.fresh }),
+    { retries: 2, baseDelayMs: 10_000, log: deps.log, label: `${phase.name}/${phase.role}` },
+  )
   const result = phase.parse ? await phase.parse(output, task) : output
   outcomes[phase.name] = result
   deps.log.info(`${phase.name}: ok${opts.fresh ? " (fresh)" : ""}`)
@@ -152,10 +156,18 @@ async function handlePhaseError(
   const detail =
     err instanceof VerdictParseError
       ? err.message
-      : `${(err as Error).message ?? String(err)}\n${((err as Error).stack ?? "").split("\n").slice(0, 5).join("\n")}`
+      : describeError(err)
   await escalate(deps, task.ticket.key, "phase-error", `Phase **${phase}** failed:\n\n\`\`\`\n${detail}\n\`\`\``)
-  deps.log.error(`${phase}: failed — ${(err as Error).message}`)
+  deps.log.error(`${phase}: failed — ${describeError(err)}`)
   return "failed"
+}
+
+/** Full error chain, not just the top message — transport errors are often opaque wrappers. */
+function describeError(err: unknown, depth = 0): string {
+  const e = err as { name?: string; message?: string; cause?: unknown }
+  const line = `${e.name ?? "Error"}: ${e.message ?? String(err)}`
+  if (depth >= 4 || !e.cause) return line
+  return `${line}\n  caused by ${describeError(e.cause, depth + 1)}`
 }
 
 /** Run a batch (non-pipeline) phase — grooming — against pre-fetched context. */

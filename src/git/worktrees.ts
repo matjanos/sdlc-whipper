@@ -18,13 +18,28 @@ export async function ensureWorktree(
 ): Promise<string> {
   const dir = worktreeDir(config, ticketKey)
   if (existsSync(dir)) return dir
+  const branch = branchName(config, ticketKey)
+  // A previous run may have left the branch behind (crash, escalation, cleanup).
+  // Reuse it — it holds that run's partial work — instead of failing on -b.
+  const branchExists = await revParseVerify(config.repoRoot, `refs/heads/${branch}`)
   await mustRun(
     `git worktree add for ${ticketKey}`,
     "git",
-    ["worktree", "add", "-b", branchName(config, ticketKey), dir, config.raw.repo.baseBranch],
+    branchExists
+      ? ["worktree", "add", dir, branch]
+      : ["worktree", "add", "-b", branch, dir, config.raw.repo.baseBranch],
     { cwd: config.repoRoot },
   )
   return dir
+}
+
+async function revParseVerify(cwd: string, ref: string): Promise<boolean> {
+  try {
+    await mustRun(`git rev-parse ${ref}`, "git", ["rev-parse", "--verify", "--quiet", ref], { cwd })
+    return true
+  } catch {
+    return false
+  }
 }
 
 export async function removeWorktree(config: ResolvedConfig, ticketKey: string): Promise<void> {

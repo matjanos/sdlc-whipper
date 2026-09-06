@@ -1,12 +1,13 @@
 import type { AgentRuntime, LedgerStore, PromptOptions, RunContext } from "../../ports/index.js"
 import type { AgentRole, LedgerEntry, PromptParts } from "../../types.js"
 import { writeWorktreeAgentConfig, agentId } from "./agents.js"
+import { isTransient } from "../../conductor/retry.js"
+import { sleep } from "../../util/exec.js"
 
 /**
- * Structural types for the beta @opencode-ai/sdk. Kept local on purpose: the
- * SDK is beta and its types churn; if a field moves, only this file changes.
- * (M2 spike: verify event/message shapes against the running server's
- * /openapi.json — extractors below are deliberately defensive.)
+ * Structural types for the OpenCode V2 client. Kept local on purpose: generated
+ * API types churn; if a field moves, only this adapter changes. (M2 spike:
+ * verify event/message shapes against the running server's /openapi.json.)
  */
 interface SdkSessionInfo {
   id: string
@@ -37,9 +38,11 @@ export interface OpenCodeRuntimeOptions {
 }
 
 /**
- * AgentRuntime over the OpenCode SDK embedded host. One host per runtime
- * instance; sessions keyed by role so follow-ups (executor review rounds)
- * reuse context, while `fresh: true` (reviewer rounds) starts clean.
+ * AgentRuntime over the OpenCode V2 background-service client. The embedded
+ * SDK's current dev package cannot be imported under Node ESM (its server
+ * dependency uses an unsupported directory import), so the documented client
+ * fallback is the production path for now. Sessions remain keyed by role per
+ * run: executor follow-ups reuse context, while reviewer rounds start fresh.
  *
  * Agent definitions are injected into the run's worktree as
  * `.opencode/opencode.json` (never committed) — target repos need no
@@ -60,10 +63,25 @@ export class OpenCodeRuntime implements AgentRuntime {
 
   private async ensureHost(): Promise<SdkHost> {
     if (this.host) return this.host
-    const mod = (await import("@opencode-ai/sdk")) as unknown as {
-      OpenCode: { create(opts?: { plugins?: unknown[] }): Promise<SdkHost> }
+    const [{ OpenCode }, { Service }] = (await Promise.all([
+      import("@opencode-ai/client"),
+      import("@opencode-ai/client/service"),
+    ])) as unknown as [
+      { OpenCode: { make(options: { baseUrl: string; headers?: Record<string, string> }): { session: SdkSessions; event: SdkEvents } } },
+      { Service: { ensure(): Promise<{ url: string }>; headers(endpoint: { url: string }): Record<string, string> | undefined } },
+    ]
+    const endpoint = await Service.ensure()
+    const client = OpenCode.make({
+      baseUrl: endpoint.url,
+      headers: Service.headers(endpoint),
+    })
+    this.host = {
+      sessions: client.session,
+      events: client.event,
+      // The conductor does not own the shared background service, so it must
+      // never stop it when one delivery finishes.
+      close: async () => undefined,
     }
-    this.host = await mod.OpenCode.create()
     void this.consumeEvents().catch(() => undefined)
     return this.host
   }
@@ -97,10 +115,35 @@ export class OpenCodeRuntime implements AgentRuntime {
     const text = parts.attachFiles?.length
       ? `${parts.text}\n\nAttached context files: ${parts.attachFiles.join(", ")}`
       : parts.text
-    await host.sessions.prompt({ sessionID, text })
-    await host.sessions.wait({ sessionID })
+    try {
+      await host.sessions.prompt({ sessionID, text })
+      await host.sessions.wait({ sessionID })
+    } catch (err) {
+      // Long-poll transports can drop while the server is still retrying the
+      // provider. Before failing the phase, check whether the run actually
+      // completed. Bounded, in code.
+      if (!isTransient(err)) throw err
+      const recovered = await this.pollForAssistant(sessionID, 6, 20_000)
+      if (recovered !== undefined) return recovered
+      throw err
+    }
     const messages = await host.sessions.context({ sessionID })
     return lastAssistantText(messages)
+  }
+
+  /** Poll session context for a completed assistant message; undefined if none appears in time. */
+  private async pollForAssistant(sessionID: string, tries: number, intervalMs: number): Promise<string | undefined> {
+    for (let i = 0; i < tries; i++) {
+      await sleep(intervalMs)
+      if (this.closed || !this.host) return undefined
+      try {
+        const messages = await this.host.sessions.context({ sessionID })
+        return lastAssistantText(messages)
+      } catch {
+        /* server still busy — keep polling */
+      }
+    }
+    return undefined
   }
 
   async interrupt(role: AgentRole): Promise<void> {
@@ -176,12 +219,19 @@ export class OpenCodeRuntime implements AgentRuntime {
 
 /** Defensive extraction of the last assistant message text across SDK shapes. */
 export function lastAssistantText(messages: readonly unknown[]): string {
+  let sawError: unknown
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i] as Record<string, any>
-    const role = msg.role ?? msg.info?.role
+    const info = msg.info ?? {}
+    const role = msg.role ?? info.role
     if (role !== "assistant") continue
+    const err = msg.error ?? info.error
+    if (err) {
+      sawError = err
+      continue
+    }
     if (typeof msg.text === "string" && msg.text.trim()) return msg.text
-    const parts = msg.parts ?? msg.info?.parts
+    const parts = msg.parts ?? info.parts
     if (Array.isArray(parts)) {
       const text = parts
         .filter((p: any) => (p.type ?? p.kind) === "text" && typeof (p.text ?? "") === "string")
@@ -190,6 +240,10 @@ export function lastAssistantText(messages: readonly unknown[]): string {
         .trim()
       if (text) return text
     }
+  }
+  if (sawError) {
+    const detail = typeof sawError === "string" ? sawError : JSON.stringify(sawError)
+    throw new Error(`opencode runtime: model call failed inside the session — ${detail.slice(0, 400)}`)
   }
   throw new Error("opencode runtime: no assistant message in session context (session may have failed)")
 }

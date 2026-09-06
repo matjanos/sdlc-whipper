@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@opencode-ai/client": "0.0.0-dev-19156",
     "@opencode-ai/sdk": "0.0.0-dev-19156",
     "zod": "^3.24.0"
   },
