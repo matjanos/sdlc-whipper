@@ -35,6 +35,17 @@ export interface OpenCodeRuntimeOptions {
   /** Directory sessions run in when the run has no worktree (grooming). */
   fallbackDirectory?: string
   ledger?: LedgerStore
+  /** Assistant-message polling window (agent runs can take minutes). */
+  assistantPollTries?: number
+  assistantPollMs?: number
+}
+
+/** The assistant message exists but carries a provider error — terminal for this attempt. */
+export class ModelCallFailedError extends Error {
+  constructor(detail: string) {
+    super(`opencode runtime: model call failed inside the session — ${detail}`)
+    this.name = "ModelCallFailedError"
+  }
 }
 
 /**
@@ -123,27 +134,36 @@ export class OpenCodeRuntime implements AgentRuntime {
       // provider. Before failing the phase, check whether the run actually
       // completed. Bounded, in code.
       if (!isTransient(err)) throw err
-      const recovered = await this.pollForAssistant(sessionID, 6, 20_000)
-      if (recovered !== undefined) return recovered
-      throw err
     }
-    const messages = await host.sessions.context({ sessionID })
-    return lastAssistantText(messages)
+    // `wait` can resolve before the run actually starts (idle race on fresh
+    // sessions), so poll for the assistant message instead of reading once.
+    return await this.awaitAssistant(sessionID, this.opts.assistantPollTries ?? 40, this.opts.assistantPollMs ?? 15_000)
   }
 
-  /** Poll session context for a completed assistant message; undefined if none appears in time. */
-  private async pollForAssistant(sessionID: string, tries: number, intervalMs: number): Promise<string | undefined> {
+  /**
+   * Poll session context until an assistant message exists. "No assistant yet"
+   * keeps polling; an error-carrying assistant message is terminal (the server
+   * already exhausted its provider retries).
+   */
+  private async awaitAssistant(sessionID: string, tries: number, intervalMs: number): Promise<string> {
     for (let i = 0; i < tries; i++) {
-      await sleep(intervalMs)
-      if (this.closed || !this.host) return undefined
+      if (i > 0) {
+        await sleep(intervalMs)
+        if (this.closed || !this.host) break
+      }
+      const host = this.host
+      if (!host) break
       try {
-        const messages = await this.host.sessions.context({ sessionID })
+        const messages = await host.sessions.context({ sessionID })
         return lastAssistantText(messages)
-      } catch {
-        /* server still busy — keep polling */
+      } catch (err) {
+        if (err instanceof ModelCallFailedError) throw err
+        /* no assistant message yet — keep polling */
       }
     }
-    return undefined
+    throw new Error(
+      `opencode runtime: session produced no assistant message within the polling window (${tries} × ${intervalMs}ms)`,
+    )
   }
 
   async interrupt(role: AgentRole): Promise<void> {
@@ -243,7 +263,7 @@ export function lastAssistantText(messages: readonly unknown[]): string {
   }
   if (sawError) {
     const detail = typeof sawError === "string" ? sawError : JSON.stringify(sawError)
-    throw new Error(`opencode runtime: model call failed inside the session — ${detail.slice(0, 400)}`)
+    throw new ModelCallFailedError(detail.slice(0, 400))
   }
   throw new Error("opencode runtime: no assistant message in session context (session may have failed)")
 }
