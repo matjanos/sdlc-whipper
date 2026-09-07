@@ -3,631 +3,281 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Conductor — how it works</title>
+<title>The Conductor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500;600&family=Libre+Franklin:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink:#0c0f0d;
-    --ink2:#12161380;
-    --panel:#101411;
-    --paper:#ede6d3;
-    --paper-dim:#a9a28d;
-    --paper-faint:#6d6858;
-    --line:rgba(237,230,211,.24);
-    --line-soft:rgba(237,230,211,.12);
-    --green:#46d68c;
-    --amber:#f2b23e;
-    --red:#e5564e;
-    --brass:#c99b4a;
-    --serif:"Instrument Serif",serif;
-    --mono:"IBM Plex Mono",monospace;
-    --sans:"Libre Franklin",sans-serif;
+    --ink:#0c0f0d; --panel:#101411; --paper:#ede6d3; --dim:#a9a28d; --faint:#6d6858;
+    --line:rgba(237,230,211,.24); --soft:rgba(237,230,211,.1);
+    --green:#46d68c; --amber:#f2b23e; --red:#e5564e; --brass:#c99b4a;
+    --serif:"Instrument Serif",serif; --mono:"IBM Plex Mono",monospace;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html{scroll-behavior:smooth}
-  body{
-    background:var(--ink);
-    color:var(--paper);
-    font-family:var(--sans);
-    font-weight:300;
-    line-height:1.65;
-    -webkit-font-smoothing:antialiased;
-    overflow-x:hidden;
-  }
-  /* film grain + vignette */
-  body::before{
-    content:"";position:fixed;inset:0;z-index:60;pointer-events:none;opacity:.055;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E");
-  }
-  body::after{
-    content:"";position:fixed;inset:0;z-index:59;pointer-events:none;
-    background:radial-gradient(120% 90% at 50% 8%,transparent 55%,rgba(0,0,0,.5) 100%);
-  }
+  body{background:var(--ink);color:var(--paper);font-family:var(--mono);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  body::before{content:"";position:fixed;inset:0;z-index:60;pointer-events:none;opacity:.055;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E")}
   .wrap{max-width:1240px;margin:0 auto;padding:0 clamp(18px,4vw,56px)}
-
-  /* ---------- masthead ---------- */
-  header{padding:34px 0 0}
   .rules{border-top:2px solid var(--paper);border-bottom:1px solid var(--line);height:5px}
-  .mast{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:22px 0 26px;flex-wrap:wrap}
-  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.24em;color:var(--paper-dim);text-transform:uppercase}
-  .kicker b{color:var(--brass);font-weight:600}
-  h1{
-    font-family:var(--serif);font-style:italic;font-weight:400;
-    font-size:clamp(52px,8.5vw,118px);line-height:.92;letter-spacing:-.01em;
-    margin-top:10px;
-  }
-  h1 .thin{color:var(--paper-dim)}
-  .mast-side{max-width:330px;font-size:14px;color:var(--paper-dim);padding-bottom:10px}
-  .mast-side strong{color:var(--paper);font-weight:500}
-  .lamps{display:flex;gap:8px;margin-bottom:12px}
-  .lamps i{width:9px;height:9px;border-radius:50%;display:block;animation:lampbreath 3.2s ease-in-out infinite}
-  .lamps i:nth-child(1){background:var(--red);animation-delay:0s}
-  .lamps i:nth-child(2){background:var(--amber);animation-delay:.5s}
+
+  .mast{display:flex;align-items:flex-end;justify-content:space-between;padding:26px 0 30px;flex-wrap:wrap;gap:18px}
+  h1{font-family:var(--serif);font-style:italic;font-weight:400;font-size:clamp(44px,7vw,92px);line-height:.92}
+  .mast .sub{color:var(--dim);font-size:12px;letter-spacing:.14em;text-transform:uppercase;padding-bottom:12px}
+  .mast .sub b{color:var(--paper);font-weight:500}
+  .lamps{display:flex;gap:8px;margin-bottom:10px}
+  .lamps i{width:9px;height:9px;border-radius:50%;display:block;animation:breath 3.2s ease-in-out infinite}
+  .lamps i:nth-child(1){background:var(--red)} .lamps i:nth-child(2){background:var(--amber);animation-delay:.5s}
   .lamps i:nth-child(3){background:var(--green);animation-delay:1s}
-  @keyframes lampbreath{0%,100%{opacity:.35;box-shadow:none}50%{opacity:1;box-shadow:0 0 12px currentColor}}
+  @keyframes breath{0%,100%{opacity:.35;box-shadow:none}50%{opacity:1;box-shadow:0 0 12px currentColor}}
 
-  /* ---------- status strip ---------- */
-  .strip{
-    font-family:var(--mono);font-size:12.5px;letter-spacing:.06em;
-    border-top:1px solid var(--line);border-bottom:1px solid var(--line);
-    padding:10px 0;color:var(--paper-dim);display:flex;gap:26px;flex-wrap:wrap;align-items:center;
-  }
-  .strip .lit{color:var(--paper)}
-  .strip .ok{color:var(--green)} .strip .warn{color:var(--amber)}
-  .cursor{display:inline-block;width:8px;height:14px;background:var(--green);vertical-align:-2px;animation:blink 1.1s steps(1) infinite}
-  @keyframes blink{50%{opacity:0}}
-
-  /* ---------- sections ---------- */
-  section{padding:64px 0 8px}
-  .sechead{display:flex;align-items:baseline;gap:18px;margin-bottom:8px}
-  .no{font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--brass);border:1px solid rgba(201,155,74,.45);padding:3px 8px;white-space:nowrap}
-  .sechead h2{font-family:var(--serif);font-style:italic;font-weight:400;font-size:clamp(30px,4vw,44px);line-height:1}
-  .sechead .aside{font-family:var(--mono);font-size:11px;color:var(--paper-faint);letter-spacing:.14em;text-transform:uppercase;margin-left:auto;text-align:right}
-  .lede{max-width:640px;color:var(--paper-dim);font-size:15px;margin-bottom:30px}
+  .lede{font-size:13px;color:var(--dim);margin:0 0 26px;max-width:640px}
   .lede b{color:var(--paper);font-weight:500}
-  .lede code, .card code, td code{font-family:var(--mono);font-size:.86em;color:var(--amber)}
 
-  /* ---------- board: track + dispatch slip ---------- */
-  .board{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(330px,1fr);gap:26px;align-items:stretch}
-  .trackbox{
-    border:1px solid var(--line);background:
-      linear-gradient(rgba(237,230,211,.03),rgba(237,230,211,0) 40%),
-      var(--panel);
-    position:relative;overflow:hidden;
-  }
-  .trackbox .cap{
-    display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
-    font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;
-    color:var(--paper-faint);padding:12px 16px;border-bottom:1px dashed var(--line-soft);
-  }
+  .board{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr);gap:24px;align-items:stretch}
+  .trackbox{border:1px solid var(--line);background:var(--panel);position:relative;overflow:hidden}
+  .trackbox .cap{display:flex;justify-content:space-between;font-size:10px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--faint);padding:11px 15px;border-bottom:1px dashed var(--soft)}
   .trackscroll{overflow-x:auto}
   svg.track{display:block;min-width:860px;width:100%;height:auto}
   .stat{cursor:pointer;outline:none}
   .stat .ring{fill:var(--ink);stroke:var(--line);stroke-width:1.4;transition:all .25s}
   .stat .lamp{fill:rgba(237,230,211,.22);transition:all .25s}
-  .stat text{fill:var(--paper-dim);font-family:var(--mono);transition:fill .25s}
+  .stat text{fill:var(--dim);font-family:var(--mono);transition:fill .25s}
   .stat .nm{font-size:12.5px;font-weight:600;letter-spacing:.12em}
   .stat .tier{font-size:8.5px;letter-spacing:.3em;opacity:.75}
   .stat .hit{fill:transparent}
   .stat:hover .ring,.stat:focus-visible .ring{stroke:var(--paper)}
   .stat:hover .lamp{fill:rgba(237,230,211,.5)}
-  .stat:hover text,.stat:focus-visible text{fill:var(--paper)}
-  .stat:focus-visible .ring{stroke-width:2;stroke-dasharray:3 3}
+  .stat:hover text{fill:var(--paper)}
+  .stat:focus-visible .ring{stroke-dasharray:3 3;stroke-width:2}
   .stat.sel .ring{stroke:var(--paper);stroke-width:1.8}
   .stat.sel text{fill:var(--paper)}
-  .stat.sel .lamp{fill:var(--acc,var(--paper));filter:drop-shadow(0 0 7px var(--acc,var(--paper)));animation:pulse 1.6s ease-in-out infinite}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  .stat.sel .lamp{fill:var(--acc,var(--paper));filter:drop-shadow(0 0 7px var(--acc,var(--paper)));animation:breath 1.6s ease-in-out infinite}
   .track path.rail{stroke:var(--line);stroke-width:1.6;fill:none}
   .track path.rail.dashed{stroke-dasharray:6 6;stroke-width:1.3;animation:fadein .9s ease 1.3s both}
   .track path.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 1.6s ease forwards}
   @keyframes draw{to{stroke-dashoffset:0}}
   @keyframes fadein{from{opacity:0}to{opacity:1}}
   .train-glow{filter:drop-shadow(0 0 6px rgba(237,230,211,.9))}
-  .lapon{font-family:var(--mono);font-size:9px;fill:var(--paper-faint);letter-spacing:.22em}
-  .legend{display:flex;gap:22px;flex-wrap:wrap;padding:12px 16px;border-top:1px dashed var(--line-soft);font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--paper-dim);text-transform:uppercase}
-  .legend i{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:7px;vertical-align:0}
+  .lapon{font-family:var(--mono);font-size:9px;fill:var(--faint);letter-spacing:.22em}
+  .legend{display:flex;gap:20px;flex-wrap:wrap;padding:11px 15px;border-top:1px dashed var(--soft);
+    font-size:10px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
+  .legend i{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
 
-  /* ---------- dispatch slip ---------- */
-  .slip{
-    border:1px dashed rgba(237,230,211,.4);background:var(--panel);
-    padding:24px 26px;position:relative;overflow:hidden;display:flex;flex-direction:column;
-  }
-  .slip::before{
-    content:"DISPATCH SLIP";position:absolute;top:14px;right:-34px;transform:rotate(38deg);
-    font-family:var(--mono);font-size:9px;letter-spacing:.3em;color:var(--paper-faint);
-    border:1px solid var(--line-soft);padding:3px 40px;
-  }
-  .slip .stampno{font-family:var(--mono);font-size:11px;letter-spacing:.22em;color:var(--brass)}
+  .slip{border:1px dashed rgba(237,230,211,.4);background:var(--panel);padding:26px 28px;position:relative}
+  .slip::before{content:"DISPATCH SLIP";position:absolute;top:14px;right:-34px;transform:rotate(38deg);
+    font-size:9px;letter-spacing:.3em;color:var(--faint);border:1px solid var(--soft);padding:3px 40px}
+  .slip .stampno{font-size:10.5px;letter-spacing:.22em;color:var(--brass)}
   .slip h3{font-family:var(--serif);font-style:italic;font-weight:400;font-size:clamp(30px,3vw,40px);line-height:1.05;margin:6px 0 2px}
-  .slip .role{color:var(--paper-dim);font-size:13.5px;margin-bottom:16px}
-  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
-  .chip{font-family:var(--mono);font-size:10px;letter-spacing:.18em;padding:4px 9px;border:1px solid var(--line);color:var(--paper-dim);text-transform:uppercase}
-  .chip.model{border-color:currentColor;font-weight:600}
-  .chip.m-sol{color:#f0e9d8}.chip.m-terra{color:var(--green)}.chip.m-luna{color:var(--amber)}.chip.m-ctrl{color:var(--brass)}
-  .chip.k-agent{color:var(--paper)}
-  .fwall{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);margin-bottom:16px}
-  .fwall div{background:var(--panel);padding:11px 13px}
-  .fwall h4{font-family:var(--mono);font-size:9.5px;letter-spacing:.24em;margin-bottom:7px;font-weight:600}
-  .fwall .sees h4{color:var(--green)} .fwall .never h4{color:var(--red)}
-  .fwall li{font-size:12.5px;color:var(--paper-dim);list-style:none;line-height:1.5}
-  .perms{display:flex;flex-direction:column;gap:5px;margin-bottom:16px}
-  .perms span{font-family:var(--mono);font-size:12px;color:var(--paper-dim)}
-  .perms i{font-style:normal;margin-right:9px}
-  .perms .y{color:var(--green)} .perms .n{color:var(--red);text-decoration:line-through;text-decoration-color:rgba(229,86,78,.55)}
-  .slip .out{font-family:var(--mono);font-size:12px;background:rgba(0,0,0,.32);border:1px solid var(--line-soft);border-left:2px solid var(--brass);padding:12px 14px;color:#d8d2bd;white-space:pre-wrap;margin-bottom:14px;overflow-x:auto}
-  .slip .route{font-size:12.5px;color:var(--paper-dim);border-top:1px dashed var(--line-soft);padding-top:12px;margin-top:auto}
+  .slip .role{color:var(--dim);font-size:13px;margin-bottom:16px}
+  .chips{display:flex;gap:8px;margin-bottom:18px}
+  .chip{font-size:10px;letter-spacing:.18em;padding:4px 9px;border:1px solid var(--line);color:var(--dim);text-transform:uppercase}
+  .chip.m-sol{color:#f0e9d8;border-color:currentColor;font-weight:600}
+  .chip.m-terra{color:var(--green);border-color:currentColor;font-weight:600}
+  .chip.m-luna{color:var(--amber);border-color:currentColor;font-weight:600}
+  .chip.m-ctrl{color:var(--brass);border-color:currentColor;font-weight:600}
+  .fw{border-left:2px solid var(--soft);padding:2px 0 2px 14px;margin-bottom:12px;font-size:12px;color:var(--dim)}
+  .fw b{font-weight:600;letter-spacing:.18em;font-size:9.5px;display:block;margin-bottom:2px}
+  .fw.sees b{color:var(--green)} .fw.never b{color:var(--red)}
+  .slip .route{font-size:12px;color:var(--dim);border-top:1px dashed var(--soft);padding-top:12px;margin-top:4px}
   .slip .route b{color:var(--paper);font-weight:500}
-  .slip .note{font-family:var(--serif);font-style:italic;font-size:16.5px;color:var(--brass);margin-top:10px}
-  .slipnav{display:flex;gap:10px;margin-top:18px}
-  .slipnav button{
-    font-family:var(--mono);font-size:11px;letter-spacing:.16em;background:none;border:1px solid var(--line);
-    color:var(--paper-dim);padding:7px 14px;cursor:pointer;transition:all .2s;text-transform:uppercase
-  }
+  .slipnav{display:flex;gap:10px;margin-top:20px}
+  .slipnav button{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;background:none;border:1px solid var(--line);
+    color:var(--dim);padding:7px 14px;cursor:pointer;transition:all .2s;text-transform:uppercase}
   .slipnav button:hover{color:var(--ink);background:var(--paper);border-color:var(--paper)}
   .swap{animation:slipin .32s ease}
   @keyframes slipin{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
 
-  /* ---------- interlocks ---------- */
-  .grid6{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line-soft);border:1px solid var(--line-soft)}
-  .lock{background:var(--ink);padding:22px 22px 24px;transition:background .25s}
-  .lock:hover{background:var(--panel)}
-  .lock .n{font-family:var(--mono);font-size:10px;letter-spacing:.26em;color:var(--brass)}
-  .lock h3{font-family:var(--serif);font-style:italic;font-weight:400;font-size:23px;margin:8px 0 8px}
-  .lock p{font-size:13px;color:var(--paper-dim)}
-  .lock p b{color:var(--paper);font-weight:500}
-
-  /* ---------- ports table ---------- */
-  table{width:100%;border-collapse:collapse;border:1px solid var(--line-soft)}
-  th{font-family:var(--mono);font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--paper-faint);text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);font-weight:500}
-  td{padding:15px 16px;border-bottom:1px solid var(--line-soft);font-size:13.5px;vertical-align:top;color:var(--paper-dim)}
-  tr:last-child td{border-bottom:none}
-  td:first-child{font-family:var(--mono);font-size:12.5px;color:var(--paper);white-space:nowrap}
-  td .def{color:var(--green);font-weight:500}
-  tr:hover td{background:rgba(237,230,211,.025)}
-
-  footer{margin:80px 0 0;border-top:2px solid var(--paper);padding:26px 0 46px}
-  .foot{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--paper-faint);text-transform:uppercase}
-  .foot a{color:var(--paper-dim);text-decoration:none;border-bottom:1px dotted var(--paper-faint)}
+  footer{margin:56px 0 0;border-top:2px solid var(--paper);padding:24px 0 40px}
+  .merge{font-family:var(--serif);font-style:italic;font-size:clamp(24px,3.2vw,38px);line-height:1.15;max-width:760px}
+  .merge em{color:var(--red)}
+  .foot{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:10px;letter-spacing:.16em;
+    color:var(--faint);text-transform:uppercase;margin-top:26px}
+  .foot a{color:var(--dim);text-decoration:none;border-bottom:1px dotted var(--faint)}
   .foot a:hover{color:var(--paper)}
-  .merge{font-family:var(--serif);font-style:italic;font-size:clamp(26px,3.4vw,40px);margin:34px 0 26px;line-height:1.15;max-width:760px}
-  .merge em{color:var(--red);font-style:italic}
 
-  @media (max-width:1020px){
-    .board{grid-template-columns:1fr}
-    .grid6{grid-template-columns:1fr 1fr}
-  }
-  @media (max-width:620px){
-    .grid6{grid-template-columns:1fr}
-    .fwall{grid-template-columns:1fr}
-  }
-  @media (prefers-reduced-motion:reduce){
-    *,*::before,*::after{animation:none!important;transition:none!important}
-  }
+  @media (max-width:1020px){ .board{grid-template-columns:1fr} }
+  @media (prefers-reduced-motion:reduce){ *,*::before,*::after{animation:none!important;transition:none!important} }
 </style>
 </head>
 <body>
-
-<header class="wrap">
-  <div class="rules"></div>
+<div class="wrap">
+  <div class="rules" style="margin-top:26px"></div>
   <div class="mast">
-    <div>
-      <div class="kicker"><b>SDLC</b> · autonomous delivery line · night board</div>
-      <h1>The <span class="thin">Conductor</span></h1>
-    </div>
-    <div class="mast-side">
+    <h1>The <span style="color:var(--dim)">Conductor</span></h1>
+    <div class="sub">
       <div class="lamps"><i></i><i></i><i></i></div>
-      <strong>Seven specialist agents</strong> run one delivery at a time — from backlog ticket to pull request.
-      Every loop, budget and side effect is enforced in <strong>deterministic code</strong>. The agents advise and build; the conductor decides.
-      <div style="margin-top:10px"><span class="kicker">click any signal box below</span></div>
+      <b>Seven agents</b> deliver one ticket at a time.<br>Every loop is bounded in <b>code</b>.
     </div>
   </div>
-  <div class="strip">
-    <span class="lit">LINE 01 — POLISH-LAW TEST</span>
-    <span>TICKET <span class="lit">LAW-1</span></span>
-    <span id="stripState">TRAIN AT: YARD</span><span class="cursor"></span>
-    <span>BUDGET <span class="lit">$10 / 2M TOK</span></span>
-    <span class="ok">MERGE GATE: HUMAN</span>
-  </div>
-</header>
+  <p class="lede">A delivery rides this line from yard to merge. <b>Click a signal box.</b></p>
 
-<main class="wrap">
-
-  <!-- ============ № 01 · THE LINE ============ -->
-  <section id="line">
-    <div class="sechead">
-      <span class="no">№ 01</span>
-      <h2>The Line</h2>
-      <span class="aside">one ticket · one train · one trip</span>
-    </div>
-    <p class="lede">
-      A delivery leaves the yard the moment a ticket is <b>selected</b> and unblocked.
-      It stops at every signal box below — each one a separate agent session with its own model,
-      its own permissions, and a <b>deliberately narrowed view</b> of the world.
-      Between <code>execute</code> and <code>review</code> sits a passing loop: the reviewer sends the work
-      back up to <b>three times</b>, then the line escalates to a human. Click anything.
-    </p>
-
-    <div class="board">
-      <div class="trackbox">
-        <div class="cap">
-          <span>track diagram · scheme A-7</span>
-          <span id="capState">DEPARTURES ON THE HALF HOUR</span>
-        </div>
-        <div class="trackscroll">
-          <svg class="track" viewBox="0 0 1200 348" role="group" aria-label="Pipeline track diagram. Stations: groomer, split, research, council siding, execute, review, publish, preview, test, human gate.">
-            <!-- yard hatching -->
-            <path class="rail" style="opacity:.35" d="M 62 86 H 130" />
-            <path class="rail" style="opacity:.35" d="M 62 106 H 130" />
-            <path d="M 64 88 v 16 M 66 90 v 12" stroke="var(--paper-faint)" stroke-width="1.4"/>
-
-            <!-- main rails -->
-            <path id="railMain" class="rail draw" pathLength="1" d="M 60 96 H 1060"/>
-            <path id="railTurn" class="rail draw" pathLength="1" style="animation-delay:.5s" d="M 1060 96 C 1146 96 1146 240 1060 240"/>
-            <path id="railRow2" class="rail draw" pathLength="1" style="animation-delay:.9s" d="M 1060 240 H 100"/>
-            <!-- buffer stop, row2 end -->
-            <path d="M 100 228 v 24" stroke="var(--paper-dim)" stroke-width="3"/>
-            <!-- council siding -->
-            <path id="railSiding" class="rail dashed" pathLength="1" d="M 500 96 C 536 40 614 40 650 96"/>
-            <text x="575" y="20" text-anchor="middle" style="font-family:var(--mono);font-size:9px;letter-spacing:.3em;fill:var(--paper-faint)">SIDING · LOW CONFIDENCE ONLY</text>
-            <!-- passing loop -->
-            <path id="railLoop" class="rail dashed" pathLength="1" d="M 660 240 C 704 306 836 306 880 240"/>
-            <text class="lapon" x="770" y="322" text-anchor="middle">≤ 3 LAPS · STALEMATE → HUMAN</text>
-
-            <!-- stations (populated by JS) -->
-            <g id="stations"></g>
-
-            <!-- human gate -->
-            <g transform="translate(132,240)" role="img" aria-label="Human merge gate">
-              <rect x="-5" y="-17" width="9" height="34" fill="var(--red)" opacity=".9"/>
-              <rect x="-5" y="-17" width="9" height="8" fill="var(--paper)"/>
-              <rect x="-5" y="1" width="9" height="8" fill="var(--paper)"/>
-              <text x="0" y="-28" text-anchor="middle" style="font-family:var(--mono);font-size:9px;letter-spacing:.26em;fill:var(--red)">HUMAN GATE</text>
-              <text x="0" y="42" text-anchor="middle" style="font-family:var(--mono);font-size:9px;letter-spacing:.26em;fill:var(--paper-faint)">MERGE</text>
-            </g>
-
-            <!-- train -->
-            <g id="train" class="train-glow" opacity="0">
-              <circle r="4.6" fill="var(--paper)"/>
-            </g>
-          </svg>
-        </div>
-        <div class="legend">
-          <span><i style="background:var(--green)"></i>approve / pass</span>
-          <span><i style="background:var(--amber)"></i>changes requested / low confidence</span>
-          <span><i style="background:var(--red)"></i>blocked / escalate</span>
-          <span><i style="background:var(--brass)"></i>deterministic step — no LLM</span>
-        </div>
+  <div class="board">
+    <div class="trackbox">
+      <div class="cap"><span>the line</span><span id="capState">one ticket · one trip</span></div>
+      <div class="trackscroll">
+        <svg class="track" viewBox="0 0 1200 348" role="group" aria-label="Pipeline track: groomer, split, research, council siding, execute, review, publish, preview, test, human gate. Click a station for details.">
+          <path class="rail" style="opacity:.35" d="M 62 86 H 130"/>
+          <path class="rail" style="opacity:.35" d="M 62 106 H 130"/>
+          <path d="M 64 88 v 16" stroke="var(--paper-faint)" stroke-width="1.4"/>
+          <path class="rail draw" pathLength="1" d="M 60 96 H 1060"/>
+          <path class="rail draw" pathLength="1" style="animation-delay:.5s" d="M 1060 96 C 1146 96 1146 240 1060 240"/>
+          <path class="rail draw" pathLength="1" style="animation-delay:.9s" d="M 1060 240 H 100"/>
+          <path d="M 100 228 v 24" stroke="var(--paper-dim)" stroke-width="3"/>
+          <path class="rail dashed" d="M 500 96 C 536 40 614 40 650 96"/>
+          <text x="575" y="20" text-anchor="middle" style="font-size:9px;letter-spacing:.3em;fill:var(--faint)">SIDING · LOW CONFIDENCE</text>
+          <path class="rail dashed" d="M 660 240 C 704 306 836 306 880 240"/>
+          <text class="lapon" x="770" y="322" text-anchor="middle">≤ 3 LAPS</text>
+          <g id="stations"></g>
+          <g transform="translate(132,240)" role="img" aria-label="Human merge gate">
+            <rect x="-5" y="-17" width="9" height="34" fill="var(--red)" opacity=".9"/>
+            <rect x="-5" y="-17" width="9" height="8" fill="var(--paper)"/>
+            <rect x="-5" y="1" width="9" height="8" fill="var(--paper)"/>
+            <text y="-28" text-anchor="middle" style="font-size:9px;letter-spacing:.26em;fill:var(--red)">HUMAN GATE</text>
+          </g>
+          <g id="train" class="train-glow" opacity="0"><circle r="4.6" fill="var(--paper)"/></g>
+        </svg>
       </div>
+      <div class="legend">
+        <span><i style="background:var(--green)"></i>approve</span>
+        <span><i style="background:var(--amber)"></i>changes / low conf</span>
+        <span><i style="background:var(--red)"></i>escalate</span>
+        <span><i style="background:var(--brass)"></i>pure code</span>
+      </div>
+    </div>
 
-      <!-- dispatch slip -->
-      <aside class="slip" aria-live="polite">
-        <div id="slipBody" class="swap"></div>
-        <div class="slipnav">
-          <button id="prevBtn" type="button">← prev box</button>
-          <button id="nextBtn" type="button">next box →</button>
-        </div>
-      </aside>
-    </div>
-  </section>
-
-  <!-- ============ № 02 · INTERLOCKS ============ -->
-  <section id="interlocks">
-    <div class="sechead">
-      <span class="no">№ 02</span>
-      <h2>Control interlocks</h2>
-      <span class="aside">wired in code · not in prompts</span>
-    </div>
-    <p class="lede">
-      Agents are leaves. Everything below is conductor code — which is why it cannot be
-      talked out of, forgotten, or improvised by a model having a confident day.
-    </p>
-    <div class="grid6">
-      <div class="lock"><div class="n">INTERLOCK 01</div><h3>Bounded loops</h3><p>Executor ⇄ reviewer runs at most <b>3 laps</b>; stalemate posts both sides to the ticket and parks it. An LLM never decides when to stop.</p></div>
-      <div class="lock"><div class="n">INTERLOCK 02</div><h3>Context firewall</h3><p>The reviewer gets <b>ticket + diff, never the plan</b>. The council gets <b>questions + plan, never the ticket</b>. Golden tests break the build if a prompt leaks.</p></div>
-      <div class="lock"><div class="n">INTERLOCK 03</div><h3>Acceptance first</h3><p>Every task begins with a <b>failing test</b> written before implementation. It is the definition of done for executor, reviewer, CI and tester alike.</p></div>
-      <div class="lock"><div class="n">INTERLOCK 04</div><h3>Stateless ticks</h3><p>All durable state lives in the <b>tracker + git</b>. The conductor reconstructs everything each tick — a crash costs one tick, nothing else.</p></div>
-      <div class="lock"><div class="n">INTERLOCK 05</div><h3>Budgets</h3><p>Per-task ceilings — <b>$15 / 4M tokens</b> by default. Breach → sessions interrupted, ticket parked with a <code>budget-exceeded</code> comment.</p></div>
-      <div class="lock"><div class="n">INTERLOCK 06</div><h3>One comment per topic</h3><p>Escalations — <code>needs-info</code>, <code>stalemate</code>, <code>test-failed</code>… — are <b>edited in place</b>, never reposted. The ticket stays readable.</p></div>
-    </div>
-  </section>
-
-  <!-- ============ № 03 · INTERCHANGE ============ -->
-  <section id="ports">
-    <div class="sechead">
-      <span class="no">№ 03</span>
-      <h2>Interchange gauge</h2>
-      <span class="aside">same ports · different vendors</span>
-    </div>
-    <p class="lede">
-      The core speaks five ports and zero vendor names. Swapping a vendor means writing an adapter
-      that passes the <b>same contract tests</b>, then flipping one line of <code>.sdlc/config.json</code>.
-    </p>
-    <table>
-      <thead><tr><th>Port</th><th>Default</th><th>Alternates</th><th>Contract</th></tr></thead>
-      <tbody>
-        <tr><td>TicketTracker</td><td><span class="def">Linear</span> · GraphQL + API key</td><td>Linear MCP (bearer) · Jira on demand</td><td>issues, comments, labels, states, relations, sub-issues — logical names only</td></tr>
-        <tr><td>CodeHost</td><td><span class="def">GitHub</span> · <code>gh</code> CLI</td><td>—</td><td>open/lookup PR (idempotent), checks, approvals — never merge</td></tr>
-        <tr><td>PreviewEnvironment</td><td><span class="def">Vercel + Neon</span> · stable <code>pr-N</code> URL</td><td>Vercel MCP (deployment state) · Railway via <code>provision()</code></td><td>observation-first; the target repo's pipeline owns provisioning &amp; teardown</td></tr>
-        <tr><td>AgentRuntime</td><td><span class="def">OpenCode</span> · background service</td><td>scripted fake (offline demos)</td><td>sessions per role · follow-ups reuse context · reviewer always fresh</td></tr>
-        <tr><td>LedgerStore</td><td><span class="def">JSONL</span> · local file</td><td>—</td><td>one line per model call, tagged <code>run/ticket/phase/agent</code> → rollups</td></tr>
-      </tbody>
-    </table>
-  </section>
+    <aside class="slip" aria-live="polite">
+      <div id="slipBody" class="swap"></div>
+      <div class="slipnav">
+        <button id="prevBtn" type="button">←</button>
+        <button id="nextBtn" type="button">→</button>
+      </div>
+    </aside>
+  </div>
 
   <footer>
     <p class="merge">The train stops here. <em>Merging stays human.</em></p>
     <div class="foot">
-      <span>sdLC CONDUCTOR · ONE HTML FILE · NO FRAMEWORKS</span>
-      <span>CONFIG: <code>.SDLC/CONFIG.JSON</code> — EVERYTHING ON THIS BOARD IS A DEFAULT, NOT A LAW</span>
-      <a href="https://github.com/matjanos/sdlc-conductor">REPO ↗</a>
+      <span>sdLC conductor</span>
+      <a href="cockpit.html">live cockpit →</a>
+      <a href="https://github.com/matjanos/sdlc-conductor">repo ↗</a>
     </div>
   </footer>
-</main>
+</div>
 
 <script>
-/* ================= data ================= */
 const NODES = {
-  groom: { no:"01", name:"GROOMER", title:"Backlog yard master", kind:"agent", tier:"LUNA",
-    sees:["A slice of the backlog + a map of the repo"],
-    never:["Implementation work — the yard master never leaves the yard"],
-    can:["read the repo","comment, label, relate and split tickets via the tracker"],
-    cannot:["edit code","decide scope on the owner's behalf"],
-    out:`{ selected, relations, splits, questions }`,
-    route:"Questions → <b>one</b> needs-info comment per ticket, phrased for a non-technical owner, edited never reposted · Selected → <b>sdlc-selected</b> label · Batches → tracker project · Splits → sub-issues",
-    note:"A batch is one coherent goal. Size is explicitly not a criterion.",
-    x:90, y:96, labelAbove:true, acc:"var(--amber)" },
-  split: { no:"02", name:"SPLIT", title:"Acceptance engineer", kind:"agent", tier:"LUNA",
-    sees:["The full ticket — description and comment thread"],
-    never:["The implementation — it defines the check, then hands over"],
-    can:["read repo conventions to place the test"],
-    cannot:["implement the feature"],
-    out:`{ acceptanceTest, testPath, brief }`,
-    route:"Writes the <b>failing test first</b> — the objective definition of done for the executor, the reviewer, CI and the tester",
-    note:"If the check can't be small, the task is too big — recommend a split.",
-    x:250, y:96, labelAbove:true, acc:"var(--amber)" },
-  research: { no:"03", name:"RESEARCH", title:"Route surveyor", kind:"agent", tier:"SOL",
-    sees:["Ticket + the codebase (read-only)"],
-    never:["Write access — surveyors don't lay track"],
-    can:["read files, grep, run read-only commands"],
-    cannot:["edit anything"],
-    out:`plan.md  +  CONFIDENCE: high|low  +  QUESTIONS[]`,
-    route:"<b>high</b> → straight to execution · <b>low</b> → the council siding is called in",
-    note:"Questions the code can answer are not questions for humans.",
-    x:430, y:96, labelAbove:true, acc:"#f0e9d8" },
-  council: { no:"04", name:"COUNCIL", title:"Principal engineer, on the siding", kind:"agent", tier:"SOL",
-    sees:["The researcher's questions + the plan — that is all"],
-    never:["The ticket, the comment thread, the full repo context — deliberately"],
-    can:["advise from engineering principle"],
-    cannot:["guess product intent — it must set needsHuman instead"],
-    out:`{ advice, needsHuman }`,
-    route:"Advice → appended to the plan, researcher continues in-session · <b>needsHuman → ticket parked</b>, owner asked",
-    note:"A fresh perspective is the value. More context would only dilute it.",
-    x:575, y:52, labelAbove:false, acc:"#f0e9d8" },
-  execute: { no:"05", name:"EXECUTE", title:"Driver", kind:"agent", tier:"TERRA",
-    sees:["Plan + acceptance test + ticket — inside its own worktree"],
-    never:["The reviewer's session — but it does receive written findings each lap"],
-    can:["edit code, run tests & lint"],
-    cannot:["<b>git push</b> — the conductor publishes"],
-    out:"implementation + test results summary",
-    route:"Findings arrive as a follow-up in the <b>same session</b> — implementation context survives every lap",
-    note:"Follow the plan; deviate only when the plan is factually wrong, and say so.",
-    x:880, y:240, labelAbove:false, acc:"var(--green)" },
-  review: { no:"06", name:"REVIEW", title:"Signal inspector", kind:"agent", tier:"SOL",
-    sees:["<b>Ticket + diff. Never the plan.</b>"],
-    never:["The plan, the council's advice, the execution notes — firewall enforced by golden tests"],
-    can:["judge, with severity-ranked findings"],
-    cannot:["edit files, run commands"],
-    out:`{ verdict: approve|changes_requested, findings[] }`,
-    route:"changes_requested → findings drive the next lap (≤3) · <b>approve</b> → publish · 3 failed laps → stalemate, humans arbitrate",
-    note:"A brand-new session every lap. Nothing leaks between rounds.",
-    x:660, y:240, labelAbove:false, acc:"#f0e9d8" },
-  publish: { no:"07", name:"PUBLISH", title:"Conductor step — no LLM", kind:"control", tier:"CTRL",
-    sees:["The worktree, the ledger, the verdict"],
-    never:["Nothing to hide — this one is just code"],
-    can:["commit (excluding conductor scratch), push the branch, open or reuse the PR"],
-    cannot:["merge — ever"],
-    out:"PR #N → linked to the ticket, with verdict + cost summary",
-    route:"Idempotent: a rerun <b>reuses the existing open PR</b> instead of duplicating it",
-    note:"Deterministic, boring, repeatable — exactly what publishing should be.",
-    x:520, y:240, labelAbove:false, acc:"var(--brass)" },
-  preview: { no:"08", name:"PREVIEW", title:"Conductor step — no LLM", kind:"control", tier:"CTRL",
-    sees:["CI checks + the stable per-PR environment URL"],
-    never:["—"],
-    can:["wait for green checks, probe the preview until it serves"],
-    cannot:["provision or tear down — the target repo's pipeline owns that"],
-    out:"ready: https://pr-N-<project>.vercel.app — with a fresh Neon branch per PR",
-    route:"Observation-first by port contract; a Railway adapter would implement provision() instead",
-    note:"Provisioning belongs to the repo. The conductor only reads the signals.",
-    x:380, y:240, labelAbove:false, acc:"var(--brass)" },
-  test: { no:"09", name:"TEST", title:"Running-board inspector", kind:"agent", tier:"LUNA",
-    sees:["The acceptance check + the <b>live preview URL</b>"],
-    never:["The plan — it tests what shipped, not what was intended"],
-    can:["drive Playwright / HTTP against the real environment"],
-    cannot:["edit files · approve on vibes — evidence or it didn't happen"],
-    out:`{ pass, evidence }  →  approval review on the PR`,
-    route:"pass → approval review · fail → <b>test-failed</b> escalation, ticket parked",
-    note:"500s, console errors, broken assets — a fail regardless of the happy path.",
-    x:250, y:240, labelAbove:false, acc:"var(--amber)" },
-  gate: { no:"10", name:"HUMAN GATE", title:"Terminus", kind:"control", tier:"CTRL",
-    sees:["The PR: diff, tests, preview, approval, cost summary"],
-    never:["Pressure to click merge"],
-    can:["review, request changes, merge — or not"],
-    cannot:["be automated. By design. For now."],
-    out:"one merge, done by a person",
-    route:"Merge deploys production · preview + Neon branch tear down automatically",
-    note:"The approval gate may grow a second agent one day. The merge stays yours.",
-    x:150, y:240, labelAbove:false, acc:"var(--red)" },
+  groom:    {no:"01",name:"GROOMER",title:"Backlog yard master",tier:"LUNA",sees:"A slice of the backlog + a map of the repo",never:"Implementation work — it selects, asks and splits only",route:"Questions → one needs-info comment · selected → <b>sdlc-selected</b> label · batches by coherence, never by size",x:90,y:96,up:1,acc:"var(--amber)"},
+  split:    {no:"02",name:"SPLIT",title:"Acceptance engineer",tier:"LUNA",sees:"The full ticket",never:"The implementation — it only defines the check",route:"Writes the <b>failing test first</b> — the definition of done for everyone after it",x:250,y:96,up:1,acc:"var(--amber)"},
+  research: {no:"03",name:"RESEARCH",title:"Route surveyor",tier:"SOL",sees:"Ticket + the codebase, read-only",never:"Write access of any kind",route:"<b>high</b> confidence → straight on · <b>low</b> → the council siding",x:430,y:96,up:1,acc:"#f0e9d8"},
+  council:  {no:"04",name:"COUNCIL",title:"Principal engineer",tier:"SOL",sees:"Questions + the plan — that is all",never:"The ticket, the repo, any wider context — by design",route:"Advice → researcher continues · product question → <b>ticket parked</b>, a human decides",x:575,y:52,up:0,acc:"#f0e9d8"},
+  execute:  {no:"05",name:"EXECUTE",title:"Driver",tier:"TERRA",sees:"Plan + acceptance test + ticket, in its own worktree",never:"git push — the conductor publishes",route:"Reviewer findings arrive as follow-ups in the <b>same session</b>, every lap",x:880,y:240,up:0,acc:"var(--green)"},
+  review:   {no:"06",name:"REVIEW",title:"Signal inspector",tier:"SOL",sees:"<b>Ticket + diff. Never the plan.</b>",never:"The plan, the council, the execution notes — firewall, golden-tested",route:"changes_requested → next lap (≤3) · approve → publish · stalemate → humans",x:660,y:240,up:0,acc:"#f0e9d8"},
+  publish:  {no:"07",name:"PUBLISH",title:"Pure code",tier:"CTRL",sees:"The worktree, the verdict",never:"Nothing to hide — it is just code",route:"commit · push · open or <b>reuse</b> the PR. Never merges.",x:520,y:240,up:0,acc:"var(--brass)"},
+  preview:  {no:"08",name:"PREVIEW",title:"Pure code",tier:"CTRL",sees:"CI checks + the stable per-PR URL",never:"Provisioning — the repo's pipeline owns that",route:"waits for green, then hands the tester a live environment",x:380,y:240,up:0,acc:"var(--brass)"},
+  test:     {no:"09",name:"TEST",title:"Running-board inspector",tier:"LUNA",sees:"The acceptance check + the <b>live preview</b>",never:"The plan — it tests what shipped, not what was intended",route:"pass → approval review · fail → <b>test-failed</b>, ticket parked",x:250,y:240,up:0,acc:"var(--amber)"},
+  gate:     {no:"10",name:"HUMAN GATE",title:"Terminus",tier:"CTRL",sees:"The PR: diff, tests, preview, cost",never:"Pressure to click merge",route:"one merge, done by a person",x:150,y:240,up:0,acc:"var(--red)"},
 };
-const ORDER = ["groom","split","research","council","execute","review","publish","preview","test","gate"];
-
-/* ================= stations ================= */
-const SVGNS = "http://www.w3.org/2000/svg";
-const stationsG = document.getElementById("stations");
-function mkStation(id){
+const ORDER = Object.keys(NODES);
+const NS = "http://www.w3.org/2000/svg";
+const g0 = document.getElementById("stations");
+for(const id of ORDER){
   const n = NODES[id];
-  const g = document.createElementNS(SVGNS,"g");
-  g.setAttribute("class","stat");
-  g.setAttribute("transform",`translate(${n.x},${n.y})`);
-  g.setAttribute("tabindex","0");
-  g.setAttribute("role","button");
-  g.setAttribute("aria-pressed","false");
-  g.setAttribute("aria-label",`${n.name} — ${n.title}. Show details.`);
-  g.style.setProperty("--acc", n.acc);
-  g.dataset.id = id;
-  g.innerHTML =
-    `<circle class="hit" r="24"/>`+
-    `<circle class="ring" r="12"/>`+
-    `<circle class="lamp" r="5.4"/>`+
-    `<text class="nm" text-anchor="middle" y="${n.labelAbove?-24:36}">${n.name}</text>`+
-    `<text class="tier" text-anchor="middle" y="${n.labelAbove?-13:47}">${n.tier}</text>`;
+  const g = document.createElementNS(NS,"g");
+  g.setAttribute("class","stat"); g.setAttribute("transform",`translate(${n.x},${n.y})`);
+  g.setAttribute("tabindex","0"); g.setAttribute("role","button"); g.setAttribute("aria-pressed","false");
+  g.setAttribute("aria-label",`${n.name} — ${n.title}`); g.dataset.id = id; g.style.setProperty("--acc",n.acc);
+  g.innerHTML = `<circle class="hit" r="24"/><circle class="ring" r="12"/><circle class="lamp" r="5.4"/>
+    <text class="nm" text-anchor="middle" y="${n.up?-24:36}">${n.name}</text>
+    <text class="tier" text-anchor="middle" y="${n.up?-13:47}">${n.tier}</text>`;
   g.addEventListener("click",()=>select(id));
-  g.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();select(id);} });
-  stationsG.appendChild(g);
+  g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select(id);}});
+  g0.appendChild(g);
 }
-ORDER.forEach(mkStation);
-
-/* ================= dispatch slip ================= */
-const slipBody = document.getElementById("slipBody");
+const slip = document.getElementById("slipBody");
 let current = null;
-function chip(tier){ return `<span class="chip model m-${tier.toLowerCase()}">${tier}</span>`; }
 function select(id){
-  current = id;
-  const n = NODES[id];
-  document.querySelectorAll(".stat").forEach(s=>{
-    const on = s.dataset.id===id;
-    s.classList.toggle("sel",on);
-    s.setAttribute("aria-pressed",on);
-  });
-  const li = a => a.map(t=>`<li>— ${t}</li>`).join("");
-  slipBody.innerHTML = `
-    <div class="stampno">BOX ${n.no} / ${ORDER.length}</div>
+  current = id; const n = NODES[id];
+  document.querySelectorAll(".stat").forEach(s=>{const on=s.dataset.id===id;s.classList.toggle("sel",on);s.setAttribute("aria-pressed",on);});
+  slip.innerHTML = `
+    <div class="stampno">${n.no} / ${ORDER.length}</div>
     <h3>${n.name.charAt(0)+n.name.slice(1).toLowerCase()}</h3>
     <div class="role">${n.title}</div>
-    <div class="chips">
-      <span class="chip k-agent">${n.kind==="agent"?"LLM AGENT":"CONDUCTOR · CODE"}</span>
-      ${chip(n.tier)}
-      <span class="chip">session: ${id==="review" ? "fresh every lap" : (n.kind==="agent"?"reused across laps":"—")}</span>
-    </div>
-    <div class="fwall">
-      <div class="sees"><h4>SEES</h4><ul>${li(n.sees)}</ul></div>
-      <div class="never"><h4>NEVER SEES</h4><ul>${li(n.never)}</ul></div>
-    </div>
-    <div class="perms">
-      ${n.can.map(t=>`<span class="y"><i>＋</i>${t}</span>`).join("")}
-      ${n.cannot.map(t=>`<span class="n"><i>✕</i>${t}</span>`).join("")}
-    </div>
-    <div class="out">${n.out.replace(/</g,"&lt;")}</div>
-    <div class="route">${n.route}</div>
-    <div class="note">“${n.note}”</div>`;
-  slipBody.classList.remove("swap"); void slipBody.offsetWidth; slipBody.classList.add("swap");
+    <div class="chips"><span class="chip m-${n.tier.toLowerCase()}">${n.tier}</span>
+      <span class="chip">${n.tier==="CTRL"?"conductor":"agent"}</span></div>
+    <div class="fw sees"><b>SEES</b>${n.sees}</div>
+    <div class="fw never"><b>NEVER SEES</b>${n.never}</div>
+    <div class="route">${n.route}</div>`;
+  slip.classList.remove("swap"); void slip.offsetWidth; slip.classList.add("swap");
 }
 document.getElementById("prevBtn").addEventListener("click",()=>select(ORDER[(ORDER.indexOf(current)-1+ORDER.length)%ORDER.length]));
 document.getElementById("nextBtn").addEventListener("click",()=>select(ORDER[(ORDER.indexOf(current)+1)%ORDER.length]));
 select("execute");
 
-/* ================= the train ================= */
-const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+/* train */
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const trainG = document.getElementById("train");
-const stripState = document.getElementById("stripState");
 const capState = document.getElementById("capState");
-const mk = d => { const p = document.createElementNS(SVGNS,"path"); p.setAttribute("d",d); p.style.visibility="hidden"; document.querySelector("svg.track").appendChild(p); return p; };
-const STEP = 12;
-function seg(d, stops=[]){ const el = mk(d); const len = el.getTotalLength(); return {el, len, stops}; }
+const mk = d=>{const p=document.createElementNS(NS,"path");p.setAttribute("d",d);p.style.visibility="hidden";document.querySelector("svg.track").appendChild(p);return p;};
+const STEP=12;
+const seg=(d,stops=[])=>{const el=mk(d);return {el,len:el.getTotalLength(),stops};};
 function buildRoute(){
-  const council = Math.random() < 0.5;
-  const r = [ seg("M 90 96 H 1060", [{len:0,id:"groom"},{len:160,id:"split"},{len:340,id:"research"}]) ];
-  if(council){
-    r.push(seg("M 500 96 C 536 40 614 40 650 96", [{frac:.5,id:"council"}]));
-    r.push(seg("M 650 96 H 1060"));
-  }
+  const council = Math.random()<.5; const r=[];
+  r.push(seg("M 90 96 H 1060",[{len:0,id:"groom"},{len:160,id:"split"},{len:340,id:"research"}]));
+  if(council){ r.push(seg("M 500 96 C 536 40 614 40 650 96",[{frac:.5,id:"council"}])); r.push(seg("M 650 96 H 1060")); }
   r.push(seg("M 1060 96 C 1146 96 1146 240 1060 240"));
-  r.push(seg("M 1060 240 H 660", [{len:180,id:"execute"},{len:400,id:"review",lap:1}]));
-  r.push(seg("M 660 240 C 704 306 836 306 880 240", [{frac:1,id:"execute",ret:true}]));
-  r.push(seg("M 880 240 H 660", [{len:220,id:"review",lap:2}]));
-  r.push(seg("M 660 240 C 704 306 836 306 880 240", [{frac:1,id:"execute",ret:true}]));
-  r.push(seg("M 880 240 H 660", [{len:220,id:"review",lap:3,final:true}]));
-  r.push(seg("M 660 240 H 150", [{len:140,id:"publish"},{len:280,id:"preview"},{len:410,id:"test"},{len:498,id:"gate"}]));
+  r.push(seg("M 1060 240 H 660",[{len:180,id:"execute"},{len:400,id:"review",lap:1}]));
+  r.push(seg("M 660 240 C 704 306 836 306 880 240",[{frac:1,id:"execute",ret:1}]));
+  r.push(seg("M 880 240 H 660",[{len:220,id:"review",lap:2}]));
+  r.push(seg("M 660 240 C 704 306 836 306 880 240",[{frac:1,id:"execute",ret:1}]));
+  r.push(seg("M 880 240 H 660",[{len:220,id:"review",lap:3,final:1}]));
+  r.push(seg("M 660 240 H 150",[{len:140,id:"publish"},{len:280,id:"preview"},{len:410,id:"test"},{len:498,id:"gate"}]));
   return r;
 }
 function routePoints(route){
-  const pts = []; // {x,y, stop?}
+  const pts=[];
   for(const s of route){
-    const n = Math.max(2, Math.round(s.len/STEP));
-    for(let i=0;i<=n;i++){
-      const p = s.el.getPointAtLength((i/n)*s.len);
-      pts.push({x:p.x, y:p.y});
-    }
+    const n=Math.max(2,Math.round(s.len/STEP));
+    for(let i=0;i<=n;i++){const p=s.el.getPointAtLength(i/n*s.len);pts.push({x:p.x,y:p.y});}
     for(const st of s.stops){
-      const len = st.frac!==undefined ? st.frac*s.len : st.len;
-      const idx = Math.min(pts.length-1, Math.round(len/STEP) + (pts.length - (Math.round(s.len/STEP)+1)));
-      pts[idx] = pts[idx] || {}; pts[idx] = {x:pts[idx].x, y:pts[idx].y, stop:st};
+      const len=st.frac!==undefined?st.frac*s.len:st.len;
+      const prevCount=pts.length-(Math.round(s.len/STEP)+1);
+      const idx=Math.min(pts.length-1,Math.round(len/STEP)+Math.max(0,prevCount));
+      if(pts[idx]) pts[idx]={x:pts[idx].x,y:pts[idx].y,stop:st};
     }
   }
   return pts;
 }
-const lamp = id => document.querySelector(`.stat[data-id="${id}"] .lamp`);
-const ring = id => document.querySelector(`.stat[data-id="${id}"]`);
-function label(st){
-  if(!st) return "";
-  const n = NODES[st.id];
-  if(st.lap) return st.final ? `REVIEW — APPROVED · PROCEEDING TO PUBLISH` : `${n.name} — CHANGES REQUESTED (LAP ${st.lap}/3)`;
-  if(st.ret) return `BACK TO ${n.name} — FINDINGS APPLIED`;
-  if(st.id==="council") return "SIDING — RESEARCHER LOW CONFIDENCE";
-  return `TRAIN AT: ${n.name}`;
-}
+const lamp=id=>document.querySelector(`.stat[data-id="${id}"] .lamp`);
 function runTrain(){
-  const pts = routePoints(buildRoute());
-  let i = 0, done = 0, holdUntil = 0;
-  const speed = 0.085; // px per ms
-  let last = performance.now();
-  const place = (x,y) => trainG.setAttribute("transform",`translate(${x},${y})`);
+  const pts=routePoints(buildRoute());
+  let i=0,done=0,hold=0,last=performance.now();
+  const place=(x,y)=>trainG.setAttribute("transform",`translate(${x},${y})`);
   function frame(now){
-    const dt = Math.min(50, now-last); last = now;
-    if(now < holdUntil){ requestAnimationFrame(frame); return; }
-    let budget = speed*dt;
-    let stopHit = null;
-    while(budget > 0 && i < pts.length-1){
-      const a = pts[i], b = pts[i+1];
-      const d = Math.hypot(b.x-a.x, b.y-a.y);
-      const remaining = d - done;
-      if(budget < remaining){ done += budget; budget = 0; }
-      else{
-        budget -= remaining; i++; done = 0;
-        const stop = pts[i] && pts[i].stop;
-        if(stop){ stopHit = stop; break; }
-      }
+    const dt=Math.min(50,now-last); last=now;
+    if(now<hold){requestAnimationFrame(frame);return;}
+    let budget=.085*dt, stopHit=null;
+    while(budget>0&&i<pts.length-1){
+      const a=pts[i],b=pts[i+1],d=Math.hypot(b.x-a.x,b.y-a.y),rem=d-done;
+      if(budget<rem){done+=budget;budget=0;}
+      else{budget-=rem;i++;done=0;const st=pts[i]&&pts[i].stop;if(st){stopHit=st;break;}}
     }
-    if(i >= pts.length-1){
-      const end = pts[pts.length-1]; place(end.x, end.y);
-      trainG.setAttribute("opacity","0");
-      setTimeout(()=>requestAnimationFrame(frame), 2600);
-      i = 0; done = 0; last = performance.now();
-      return;
-    }
-    const cur = pts[i], nxt = pts[i+1];
-    const d = Math.hypot(nxt.x-cur.x, nxt.y-cur.y);
-    const f = d ? Math.min(1, done/d) : 0;
-    place(cur.x+(nxt.x-cur.x)*f, cur.y+(nxt.y-cur.y)*f);
-    trainG.setAttribute("opacity","1");
+    if(i>=pts.length-1){const e=pts[pts.length-1];place(e.x,e.y);trainG.setAttribute("opacity","0");
+      setTimeout(()=>requestAnimationFrame(frame),2600);i=0;done=0;last=performance.now();return;}
+    const c=pts[i],n2=pts[i+1],d=Math.hypot(n2.x-c.x,n2.y-c.y),f=d?Math.min(1,done/d):0;
+    place(c.x+(n2.x-c.x)*f,c.y+(n2.y-c.y)*f);trainG.setAttribute("opacity","1");
     if(stopHit){
-      holdUntil = now + 750;
-      stripState.innerHTML = `<span class="lit">${label(stopHit)}</span>`;
-      capState.textContent = stopHit.lap && !stopHit.final ? `LOOP CONTROL — LAP ${stopHit.lap} OF 3` : "LINE CLEAR AHEAD";
-      const L = lamp(stopHit.id);
-      if(L){ L.style.filter = `drop-shadow(0 0 9px ${NODES[stopHit.id].acc})`; setTimeout(()=>{L.style.filter="";}, 1600); }
+      hold=now+750;
+      capState.textContent = stopHit.lap&&!stopHit.final ? `LAP ${stopHit.lap} OF 3` : stopHit.id==="council" ? "SIDING TAKEN" : "ONE TICKET · ONE TRIP";
+      const L=lamp(stopHit.id);
+      if(L){L.style.filter=`drop-shadow(0 0 9px ${NODES[stopHit.id].acc})`;setTimeout(()=>{L.style.filter="";},1600);}
     }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 }
-if(!reduceMotion){
-  // let the draw-in animation land first
-  setTimeout(runTrain, 2000);
-}else{
-  stripState.textContent = "TRAIN AT: YARD — MOTION REDUCED";
-}
+if(!reduce) setTimeout(runTrain,1800);
 </script>
 </body>
 </html>
