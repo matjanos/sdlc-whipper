@@ -1,5 +1,6 @@
 import type { AgentRuntime, LedgerStore, PromptOptions, RunContext } from "../../ports/index.js"
 import type { AgentRole, LedgerEntry, PromptParts } from "../../types.js"
+import { resolveModel } from "../../config.js"
 import { writeWorktreeAgentConfig, agentId } from "./agents.js"
 import { isTransient } from "../../conductor/retry.js"
 import { sleep } from "../../util/exec.js"
@@ -15,9 +16,10 @@ interface SdkSessionInfo {
 interface SdkSessions {
   create(input: { location: { directory: string }; title?: string }): Promise<SdkSessionInfo>
   switchAgent(input: { sessionID: string; agent: string }): Promise<void>
+  switchModel(input: { sessionID: string; model: { providerID: string; id: string; variant?: string } }): Promise<void>
   prompt(input: { sessionID: string; text: string }): Promise<unknown>
   wait(input: { sessionID: string }): Promise<void>
-  context(input: { sessionID: string }): Promise<readonly unknown[]>
+  context(input: { sessionID: string }): Promise<unknown>
   interrupt(input: { sessionID: string; continue: boolean }): Promise<void>
 }
 interface SdkEvents {
@@ -119,10 +121,35 @@ export class OpenCodeRuntime implements AgentRuntime {
     return session.id
   }
 
+  /** Parse `provider/id[#variant]` from config. */
+  private modelRef(role: AgentRole): { providerID: string; id: string; variant?: string } | undefined {
+    const ref = resolveModel(this.opts.config, role)
+    if (!ref) return undefined
+    const slash = ref.indexOf("/")
+    if (slash <= 0) throw new Error(`opencode runtime: model ref "${ref}" must be provider/id`)
+    const [providerID, rest] = [ref.slice(0, slash), ref.slice(slash + 1)]
+    const hash = rest.indexOf("#")
+    return hash > 0
+      ? { providerID, id: rest.slice(0, hash), variant: rest.slice(hash + 1) }
+      : { providerID, id: rest }
+  }
+
   async prompt(role: AgentRole, parts: PromptParts, opts?: PromptOptions): Promise<string> {
     const host = await this.ensureHost()
     const sessionID = await this.sessionFor(role, opts?.fresh === true)
     await host.sessions.switchAgent({ sessionID, agent: agentId(role) })
+    // Agent-config model fields are not reliably applied to new sessions —
+    // set the model explicitly so conductor config is the single source of truth.
+    const model = this.modelRef(role)
+    if (model) {
+      try {
+        await host.sessions.switchModel({ sessionID, model })
+      } catch (err) {
+        throw new Error(
+          `opencode runtime: cannot set model ${model.providerID}/${model.id} for ${role} — check providers/auth (${(err as Error).message})`,
+        )
+      }
+    }
     const text = parts.attachFiles?.length
       ? `${parts.text}\n\nAttached context files: ${parts.attachFiles.join(", ")}`
       : parts.text
@@ -154,8 +181,7 @@ export class OpenCodeRuntime implements AgentRuntime {
       const host = this.host
       if (!host) break
       try {
-        const messages = await host.sessions.context({ sessionID })
-        return lastAssistantText(messages)
+        return lastAssistantText(await host.sessions.context({ sessionID }))
       } catch (err) {
         if (err instanceof ModelCallFailedError) throw err
         /* no assistant message yet — keep polling */
@@ -237,13 +263,31 @@ export class OpenCodeRuntime implements AgentRuntime {
   }
 }
 
-/** Defensive extraction of the last assistant message text across SDK shapes. */
-export function lastAssistantText(messages: readonly unknown[]): string {
+/** Unwrap client envelopes ({data:[...]}) and tolerate already-array responses. */
+function normalizeMessageList(raw: unknown): readonly unknown[] {
+  if (Array.isArray(raw)) return raw
+  if (raw && typeof raw === "object") {
+    for (const key of ["data", "messages", "items"]) {
+      const value = (raw as Record<string, unknown>)[key]
+      if (Array.isArray(value)) return value
+    }
+  }
+  return []
+}
+
+/**
+ * Defensive extraction of the last assistant message text. Real V2 shape:
+ * `{ type: "assistant", content: [{ type: "reasoning" | "text", text }], ... }`
+ * — but older `role`/`parts`/`text` shapes are tolerated. Error-carrying
+ * assistant messages throw ModelCallFailedError (terminal for this attempt).
+ */
+export function lastAssistantText(raw: unknown): string {
+  const messages = normalizeMessageList(raw)
   let sawError: unknown
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i] as Record<string, any>
     const info = msg.info ?? {}
-    const role = msg.role ?? info.role
+    const role = msg.role ?? msg.type ?? info.role ?? info.type
     if (role !== "assistant") continue
     const err = msg.error ?? info.error
     if (err) {
@@ -251,7 +295,7 @@ export function lastAssistantText(messages: readonly unknown[]): string {
       continue
     }
     if (typeof msg.text === "string" && msg.text.trim()) return msg.text
-    const parts = msg.parts ?? info.parts
+    const parts = msg.parts ?? msg.content ?? info.parts ?? info.content
     if (Array.isArray(parts)) {
       const text = parts
         .filter((p: any) => (p.type ?? p.kind) === "text" && typeof (p.text ?? "") === "string")
