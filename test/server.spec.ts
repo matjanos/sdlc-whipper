@@ -9,15 +9,12 @@ afterAll(() => {
   for (const s of servers) s.close()
 })
 
-function start(deps: ReturnType<typeof wireFakes>["deps"]): Promise<number> {
-  return new Promise((resolve) => {
-    const server = createCockpitServer(deps, { port: 0 })
-    servers.push(server)
-    server.once("listening", () => {
-      const address = server.address()
-      if (address && typeof address === "object") resolve(address.port)
-    })
-  })
+async function start(deps: ReturnType<typeof wireFakes>["deps"]): Promise<number> {
+  const server = await createCockpitServer(deps, { port: 0 })
+  servers.push(server)
+  const address = server.address()
+  if (!address || typeof address !== "object") throw new Error("server did not expose a port")
+  return address.port
 }
 
 describe("cockpit server", () => {

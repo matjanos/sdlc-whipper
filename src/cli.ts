@@ -94,7 +94,7 @@ async function main(): Promise<void> {
         if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`invalid port: ${port}`)
         const deps = createDeps(config, log, { runtime: "none" })
         const { createCockpitServer } = await import("./conductor/server.js")
-        createCockpitServer(deps, { port })
+        await createCockpitServer(deps, { port })
         log.info(`serving cockpit for ${config.repoRoot} — Ctrl+C to stop`)
         break
       }

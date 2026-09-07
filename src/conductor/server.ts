@@ -20,7 +20,7 @@ export interface ServeOptions {
   host?: string
 }
 
-export function createCockpitServer(deps: ConductorDeps, opts: ServeOptions): Server {
+export async function createCockpitServer(deps: ConductorDeps, opts: ServeOptions): Promise<Server> {
   const token = process.env["SDL_SERVE_TOKEN"]
   const host = opts.host ?? process.env["SDL_SERVE_HOST"] ?? "127.0.0.1"
 
@@ -30,6 +30,11 @@ export function createCockpitServer(deps: ConductorDeps, opts: ServeOptions): Se
       if (!res.headersSent) res.writeHead(500, { "content-type": "application/json" })
       res.end(JSON.stringify({ error: (err as Error).message }))
     })
+  })
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject)
+    server.listen(opts.port, host, () => resolve())
   })
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -119,10 +124,10 @@ export function createCockpitServer(deps: ConductorDeps, opts: ServeOptions): Se
     res.end(JSON.stringify({ error: `no route: ${req.method} ${url.pathname}` }))
   }
 
-  const serverWithPort = server
-  serverWithPort.listen(opts.port, host)
-  deps.log.info(`cockpit: http://${host}:${opts.port} (state: /api/state · events: /api/events)`)
-  return serverWithPort
+  const address = server.address()
+  const actualPort = address && typeof address === "object" ? address.port : opts.port
+  deps.log.info(`cockpit: http://${host}:${actualPort} (state: /api/state · events: /api/events)`)
+  return server
 }
 
 function authorized(url: URL, req: IncomingMessage, token: string): boolean {
