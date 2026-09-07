@@ -42,9 +42,13 @@ async function commitIdentity(worktree: string): Promise<string[]> {
 
 /** Stage everything except conductor/runtime scratch dirs, then commit. */
 export async function commitAll(worktree: string, message: string): Promise<void> {
-  await mustRun("git add", "git", ["add", "-A", "--", ".", ":(exclude).opencode", ":(exclude).sdlc"], {
-    cwd: worktree,
-  })
+  // `git add -A` silently skips ignored files. The reset afterwards unstages
+  // the scratch dirs for target repos that do NOT ignore them. Exclude
+  // pathspecs (`:(exclude).opencode`) cannot be used here: they abort the add
+  // with exit 1 when those dirs ARE gitignored — which is the recommended
+  // target-repo setup — so publishing would fail on every such repo.
+  await mustRun("git add", "git", ["add", "-A", "--", "."], { cwd: worktree })
+  await mustRun("git reset", "git", ["reset", "-q", "--", ".opencode", ".sdlc"], { cwd: worktree })
   const identity = await commitIdentity(worktree)
   await mustRun("git commit", "git", [...identity, "commit", "-m", message], { cwd: worktree })
 }
