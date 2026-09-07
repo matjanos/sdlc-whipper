@@ -20,6 +20,7 @@ interface SdkSessions {
   prompt(input: { sessionID: string; text: string }): Promise<unknown>
   wait(input: { sessionID: string }): Promise<void>
   context(input: { sessionID: string }): Promise<unknown>
+  active(): Promise<unknown>
   interrupt(input: { sessionID: string; continue: boolean }): Promise<void>
 }
 interface SdkEvents {
@@ -37,9 +38,10 @@ export interface OpenCodeRuntimeOptions {
   /** Directory sessions run in when the run has no worktree (grooming). */
   fallbackDirectory?: string
   ledger?: LedgerStore
-  /** Assistant-message polling window (agent runs can take minutes). */
-  assistantPollTries?: number
+  /** Poll interval while waiting for an assistant message. */
   assistantPollMs?: number
+  /** Absolute cap on waiting for one agent run (tool loops can be long). */
+  assistantMaxMs?: number
 }
 
 /** The assistant message exists but carries a provider error — terminal for this attempt. */
@@ -164,16 +166,23 @@ export class OpenCodeRuntime implements AgentRuntime {
     }
     // `wait` can resolve before the run actually starts (idle race on fresh
     // sessions), so poll for the assistant message instead of reading once.
-    return await this.awaitAssistant(sessionID, this.opts.assistantPollTries ?? 40, this.opts.assistantPollMs ?? 15_000)
+    return await this.awaitAssistant(sessionID)
   }
 
   /**
-   * Poll session context until an assistant message exists. "No assistant yet"
-   * keeps polling; an error-carrying assistant message is terminal (the server
-   * already exhausted its provider retries).
+   * Poll session context until an assistant text appears. Agent runs loop on
+   * tools for a long time before answering, so while the server reports the
+   * session as actively running we keep waiting (up to `assistantMaxMs`,
+   * default 30 min). A session that goes idle without producing a message
+   * gets a short grace window, then we fail — that is a stuck run, not a
+   * working one. Error-carrying assistant messages are terminal.
    */
-  private async awaitAssistant(sessionID: string, tries: number, intervalMs: number): Promise<string> {
-    for (let i = 0; i < tries; i++) {
+  private async awaitAssistant(sessionID: string): Promise<string> {
+    const intervalMs = this.opts.assistantPollMs ?? 15_000
+    const maxIdlePolls = 6 // ~90s of idle-with-no-message before giving up
+    const deadline = Date.now() + (this.opts.assistantMaxMs ?? 30 * 60_000)
+    let idlePolls = 0
+    for (let i = 0; Date.now() < deadline; i++) {
       if (i > 0) {
         await sleep(intervalMs)
         if (this.closed || !this.host) break
@@ -184,12 +193,29 @@ export class OpenCodeRuntime implements AgentRuntime {
         return lastAssistantText(await host.sessions.context({ sessionID }))
       } catch (err) {
         if (err instanceof ModelCallFailedError) throw err
-        /* no assistant message yet — keep polling */
+        /* no assistant text yet — check liveness below */
+      }
+      const running = await this.isRunning(host, sessionID)
+      idlePolls = running ? 0 : idlePolls + 1
+      if (idlePolls >= maxIdlePolls) {
+        throw new Error(
+          `opencode runtime: session idle for ${maxIdlePolls} polls with no assistant message (${sessionID})`,
+        )
       }
     }
     throw new Error(
-      `opencode runtime: session produced no assistant message within the polling window (${tries} × ${intervalMs}ms)`,
+      `opencode runtime: session produced no assistant message within the polling window (${sessionID})`,
     )
+  }
+
+  private async isRunning(host: SdkHost, sessionID: string): Promise<boolean> {
+    try {
+      const raw = await host.sessions.active()
+      const map = ((raw as Record<string, any>)?.data ?? raw) as Record<string, { type?: string }> | undefined
+      return Boolean(map?.[sessionID])
+    } catch {
+      return false // endpoint unavailable → fall back to idle-bounded polling
+    }
   }
 
   async interrupt(role: AgentRole): Promise<void> {
@@ -208,6 +234,9 @@ export class OpenCodeRuntime implements AgentRuntime {
 
   async close(): Promise<void> {
     this.closed = true
+    // Never orphan billable in-flight runs: a run ending (failure, budget,
+    // shutdown) kills its remaining sessions. On success nothing is running.
+    await this.interruptAll().catch(() => undefined)
     this.sessions.clear()
     if (this.host) {
       const host = this.host
