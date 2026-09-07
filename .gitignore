@@ -4,3 +4,4 @@ dist/
 .ledger/
 *.log
 .DS_Store
+.playwright-mcp/
