@@ -49,18 +49,56 @@ export class VerdictParseError extends Error {
   }
 }
 
-/** Extract the last fenced ```json block and parse it. Agents are instructed to end with a verdict block. */
+/** Last balanced `{…}` span that parses as an object — tolerance for unfenced verdicts. */
+function lastJsonObject(output: string): unknown | undefined {
+  const end = output.lastIndexOf("}")
+  if (end < 0) return undefined
+  let depth = 0
+  let inString = false
+  let escape = false
+  for (let i = end; i >= 0; i--) {
+    const ch = output[i]
+    if (inString) {
+      if (escape) escape = false
+      else if (ch === "\\") escape = true
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') inString = true
+    else if (ch === "}") depth++
+    else if (ch === "{") {
+      depth--
+      if (depth === 0) {
+        try {
+          const parsed: unknown = JSON.parse(output.slice(i, end + 1))
+          return parsed && typeof parsed === "object" ? parsed : undefined
+        } catch {
+          return undefined
+        }
+      }
+    }
+  }
+  return undefined
+}
+
+/**
+ * Extract the last fenced ```json block and parse it. Agents are instructed to end
+ * with a verdict block. Tolerance: a bare JSON object without the fence is also
+ * accepted — real models sometimes drop the fence while keeping the contract.
+ */
 export function extractVerdict<T>(phase: string, output: string): T {
-  const blocks = [...output.matchAll(/```json\s*([\s\S]*?)```/g)]
+  const blocks = [...output.matchAll(/```json\s*([\s\S]*?)```/gi)]
   const last = blocks.at(-1)
-  if (!last || !last[1]) {
-    throw new VerdictParseError(phase, "no ```json fenced block found in output")
+  if (last?.[1]) {
+    try {
+      return JSON.parse(last[1]) as T
+    } catch (err) {
+      throw new VerdictParseError(phase, `invalid JSON: ${(err as Error).message}`)
+    }
   }
-  try {
-    return JSON.parse(last[1]) as T
-  } catch (err) {
-    throw new VerdictParseError(phase, `invalid JSON: ${(err as Error).message}`)
-  }
+  const bare = lastJsonObject(output)
+  if (bare !== undefined) return bare as T
+  throw new VerdictParseError(phase, "no ```json fenced block found in output")
 }
 
 /** Extract + zod-validate; shape errors become VerdictParseError with precise detail. */

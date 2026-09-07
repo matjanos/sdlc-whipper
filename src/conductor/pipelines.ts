@@ -41,6 +41,15 @@ function phaseEnabled(deps: ConductorDeps, name: PhaseName): boolean {
   return flag?.enabled !== false
 }
 
+/**
+ * Mechanical format correction for an unparsable verdict. Carries no new
+ * context (firewall-safe): it only restates the output contract. Bounded —
+ * runLLMPhase re-asks exactly once before failing the phase.
+ */
+const VERDICT_CORRECTION =
+  "Your previous reply could not be parsed: the final ```json verdict block was missing or invalid. " +
+  "Reply again with your verdict and END your reply with the exact ```json verdict block specified in the task, nothing after it."
+
 /** Run one LLM phase end-to-end: assemble context (firewall) → budget → prompt → parse → side effects. */
 async function runLLMPhase(
   deps: ConductorDeps,
@@ -52,13 +61,32 @@ async function runLLMPhase(
   if (!phase.role || !phase.input) throw new Error(`${phase.name}: not an LLM phase`)
   const parts = await phase.input(task, outcomes)
   await deps.budget.assert(task.runId)
-  const output = await withTransientRetry(
-    () => deps.runtime.prompt(phase.role!, parts, { fresh: opts.fresh }),
-    { retries: 2, baseDelayMs: 10_000, log: deps.log, label: `${phase.name}/${phase.role}` },
-  )
-  const result = phase.parse ? await phase.parse(output, task) : output
+  const prompt = (text: Parameters<typeof deps.runtime.prompt>[1]) =>
+    withTransientRetry(() => deps.runtime.prompt(phase.role!, text, { fresh: opts.fresh }), {
+      retries: 2,
+      baseDelayMs: 10_000,
+      log: deps.log,
+      label: `${phase.name}/${phase.role}`,
+    })
+  let output = await prompt(parts)
+  const parse = () => (phase.parse ? phase.parse(output, task) : output)
+  let retried = false
+  let result
+  try {
+    result = await parse()
+  } catch (err) {
+    // An unparsable verdict is flow control, not a phase failure: re-ask the
+    // same session once with a mechanical correction (bounded in code). The
+    // correction carries no new context — firewall stays intact.
+    if (!(err instanceof VerdictParseError)) throw err
+    deps.log.warn(`${phase.name}: verdict unparsable — one corrective re-ask`)
+    await deps.budget.assert(task.runId)
+    output = await prompt({ text: VERDICT_CORRECTION })
+    retried = true
+    result = await parse()
+  }
   outcomes[phase.name] = result
-  deps.log.info(`${phase.name}: ok${opts.fresh ? " (fresh)" : ""}`)
+  deps.log.info(`${phase.name}: ok${opts.fresh ? " (fresh)" : ""}${retried ? " (verdict retried)" : ""}`)
   if (phase.onResult) await phase.onResult(task, result, outcomes)
 }
 
