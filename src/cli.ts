@@ -12,10 +12,12 @@ Usage:
   sdlc status  [--config <path>] [--json]      read-only: what a tick would do and why
   sdlc tick    [--config <path>] [--dry-run] [--runtime opencode|fake] [--no-groom]
   sdlc deliver <KEY> [--config <path>] [--dry-run] [--runtime opencode|fake]
+  sdlc serve   [--config <path>] [--port 4747] live cockpit (state + SSE + actions)
   sdlc ledger  [--config <path>] [--ticket KEY] [--by ticket|phase|run|agent]
 
 Environment: LINEAR_API_KEY (graphql adapter) or LINEAR_MCP_TOKEN (mcp adapter).
 Demo/offline: --runtime fake with "adapters": {"tracker":"fake",...} in config.
+Cockpit: SDL_SERVE_TOKEN (optional bearer), SDL_SERVE_HOST (default 127.0.0.1).
 
 Docs: README.md — ports/adapters, pipelines, budgets, the context firewall.`
 
@@ -85,6 +87,15 @@ async function main(): Promise<void> {
             `${r.key.slice(0, 24).padEnd(24)} ${String(r.runs).padStart(6)} ${String(r.tokens).padStart(14)} ${r.costUsd.toFixed(2).padStart(9)}`,
           )
         }
+        break
+      }
+      case "serve": {
+        const port = Number(flagString(args.flags, "port") ?? 4747)
+        if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`invalid port: ${port}`)
+        const deps = createDeps(config, log, { runtime: "none" })
+        const { createCockpitServer } = await import("./conductor/server.js")
+        createCockpitServer(deps, { port })
+        log.info(`serving cockpit for ${config.repoRoot} — Ctrl+C to stop`)
         break
       }
       default:

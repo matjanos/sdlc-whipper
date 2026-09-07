@@ -56,7 +56,7 @@ export function selectedLabelName(deps: ConductorDeps): string {
   return selectorFor(deps.config, "selected").name
 }
 
-function classifyCandidate(deps: ConductorDeps, ticket: Ticket): string | undefined {
+export function classifyCandidate(deps: ConductorDeps, ticket: Ticket): string | undefined {
   const needsInfo = needsInfoLabelName(deps)
   if (ticket.labels.includes(needsInfo)) return "waiting for human answers (needs-info)"
   const blocker = ticket.relations.find(
