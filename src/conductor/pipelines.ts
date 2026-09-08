@@ -6,6 +6,10 @@ import { escalate } from "./actions.js"
 import { withTransientRetry } from "./retry.js"
 import { BudgetExceededError, EscalationError, ModelCallFailedError, type RunStatus } from "../types.js"
 import { VerdictParseError } from "../phases/shared.js"
+import { resolveModel } from "../config.js"
+import { createSpinner, formatElapsed, renderTrail } from "../util/progress.js"
+import { formatTokens } from "../util/format.js"
+import { isShuttingDown } from "../util/shutdown.js"
 
 /**
  * Pipelines are data. Reorder, disable, or insert steps here without touching
@@ -61,6 +65,19 @@ async function runLLMPhase(
   if (!phase.role || !phase.input) throw new Error(`${phase.name}: not an LLM phase`)
   const parts = await phase.input(task, outcomes)
   await deps.budget.assert(task.runId)
+
+  const spinner = createSpinner()
+  const startedAt = Date.now()
+  const role = phase.role
+  const model = resolveModel(deps.config, role)?.split("/").pop()
+  const label = `${role.startsWith(phase.name) ? phase.name : `${phase.name} · ${role}`}${model ? ` · ${model}` : ""}`
+  spinner.start(`${label} — working`)
+  deps.runtime.activityFeed?.((info) => {
+    if (info.role !== role) return
+    const tokens = info.tokens ? ` · ${formatTokens(info.tokens)} tok` : ""
+    spinner.update(`${label} — ${info.text}${tokens}`)
+  })
+
   const prompt = (text: Parameters<typeof deps.runtime.prompt>[1]) =>
     withTransientRetry(() => deps.runtime.prompt(phase.role!, text, { fresh: opts.fresh }), {
       retries: 2,
@@ -68,26 +85,33 @@ async function runLLMPhase(
       log: deps.log,
       label: `${phase.name}/${phase.role}`,
     })
-  let output = await prompt(parts)
-  const parse = () => (phase.parse ? phase.parse(output, task) : output)
-  let retried = false
-  let result
   try {
-    result = await parse()
-  } catch (err) {
-    // An unparsable verdict is flow control, not a phase failure: re-ask the
-    // same session once with a mechanical correction (bounded in code). The
-    // correction carries no new context — firewall stays intact.
-    if (!(err instanceof VerdictParseError)) throw err
-    deps.log.warn(`${phase.name}: verdict unparsable — one corrective re-ask`)
-    await deps.budget.assert(task.runId)
-    output = await prompt({ text: VERDICT_CORRECTION })
-    retried = true
-    result = await parse()
+    let output = await prompt(parts)
+    const parse = () => (phase.parse ? phase.parse(output, task) : output)
+    let retried = false
+    let result
+    try {
+      result = await parse()
+    } catch (err) {
+      // An unparsable verdict is flow control, not a phase failure: re-ask the
+      // same session once with a mechanical correction (bounded in code). The
+      // correction carries no new context — firewall stays intact.
+      if (!(err instanceof VerdictParseError)) throw err
+      deps.log.warn(`${phase.name}: verdict unparsable — one corrective re-ask`)
+      await deps.budget.assert(task.runId)
+      output = await prompt({ text: VERDICT_CORRECTION })
+      retried = true
+      result = await parse()
+    }
+    outcomes[phase.name] = result
+    spinner.stop() // free the line before the phase log lands on it
+    deps.log.info(
+      `${phase.name}: ok${opts.fresh ? " (fresh)" : ""}${retried ? " (verdict retried)" : ""} (${formatElapsed(Date.now() - startedAt)})`,
+    )
+    if (phase.onResult) await phase.onResult(task, result, outcomes)
+  } finally {
+    spinner.stop()
   }
-  outcomes[phase.name] = result
-  deps.log.info(`${phase.name}: ok${opts.fresh ? " (fresh)" : ""}${retried ? " (verdict retried)" : ""}`)
-  if (phase.onResult) await phase.onResult(task, result, outcomes)
 }
 
 async function runPurePhase(
@@ -124,6 +148,16 @@ export async function runDeliveryPipeline(
       continue
     }
     phaseReached = step.phase
+    // quiet wayfinding: the route so far, where we are, what is ahead
+    const route = DELIVERY_PIPELINE.filter((s) => phaseEnabled(deps, s.phase))
+      .filter((s) => !s.when || s.when(outcomes))
+      .map((s) => s.phase)
+    const at = route.indexOf(step.phase)
+    if (at >= 0) {
+      deps.log.info(
+        renderTrail(route.map((name, i) => ({ name, state: i < at ? "done" : i === at ? "current" : "todo" }))),
+      )
+    }
 
     try {
       if (step.loopWith) {
@@ -170,6 +204,12 @@ async function handlePhaseError(
   err: unknown,
   phase: PhaseName,
 ): Promise<RunStatus> {
+  if (isShuttingDown()) {
+    // user-initiated stop: sessions were interrupted, lock released — do not
+    // post escalations or retry against a world the user asked to stop.
+    deps.log.warn(`${phase}: interrupted by user — stopping without escalation`)
+    return "failed"
+  }
   if (err instanceof EscalationError) {
     await escalate(deps, task.ticket.key, err.tag, err.body)
     deps.log.warn(`${phase}: escalated [${err.tag}]`)

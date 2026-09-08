@@ -1,3 +1,6 @@
+import { clearActiveSpinnerLine, redrawActiveSpinnerLine, colorEnabled } from "./progress.js"
+import { formatClock } from "./format.js"
+
 export type LogLevel = "debug" | "info" | "warn" | "error"
 
 const order: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 }
@@ -15,17 +18,38 @@ export interface LoggerOptions {
   pretty?: boolean
 }
 
+const tint: Record<LogLevel, (text: string) => string> = {
+  debug: (t) => `\u001B[90m${t}\u001B[0m`, // bright black
+  info: (t) => `\u001B[32m${t}\u001B[0m`, // green
+  warn: (t) => `\u001B[33m${t}\u001B[0m`, // yellow
+  error: (t) => `\u001B[31m${t}\u001B[0m`, // red
+}
+
 export function createLogger(level: LogLevel = "info", options: LoggerOptions = {}): Logger {
   const write = (lvl: LogLevel, prefix: string, msg: string, args: unknown[]) => {
     if (order[lvl] < order[level]) return
     const tag = prefix ? ` ${prefix}` : ""
-    const glyph: Record<LogLevel, string> = { debug: "·", info: "│", warn: "!", error: "×" }
-    const line = options.pretty
-      ? `  ${glyph[lvl]}${prefix ? ` ${prefix.padEnd(12)}` : ""} ${msg}`
-      : `${new Date().toISOString()} [${lvl.toUpperCase()}]${tag} ${msg}`
+    const colored = colorEnabled()
+    const glyph: Record<LogLevel, string> = { debug: "·", info: "│", warn: "▲", error: "✕" }
+    let line: string
+    if (options.pretty) {
+      const mark = tint[lvl](glyph[lvl])
+      line = `  ${mark}${prefix ? ` ${prefix.padEnd(12)}` : ""} ${msg}`
+      // muted wall-clock stamp pinned to the right edge — quiet, always there
+      const clock = colored ? `\u001B[90m${formatClock()}\u001B[0m` : formatClock()
+      const visible = line.length
+      const width = process.stdout.columns ?? 80
+      line += visible >= width - 9 ? `  ${clock}` : `${" ".repeat(Math.max(2, width - 9 - visible))}${clock}`
+    } else {
+      line = `${new Date().toISOString()} [${lvl.toUpperCase()}]${tag} ${msg}`
+    }
+    // share the cursor with the live spinner: clear its partial line, log,
+    // then let the spinner redraw below the fresh log line
+    clearActiveSpinnerLine()
     if (lvl === "error") console.error(line, ...args)
     else if (lvl === "warn") console.warn(line, ...args)
     else console.log(line, ...args)
+    redrawActiveSpinnerLine()
   }
   const make = (prefix: string): Logger => ({
     debug: (m, ...a) => write("debug", prefix, m, a),

@@ -37,11 +37,11 @@ describe("friendly CLI skin", () => {
 
   it("turns status into a clear team briefing with a next action", () => {
     const text = renderStatus(report)
-    expect(text).toContain("●  1  ready at the gate")
-    expect(text).toContain("■  1  held by dependencies")
+    expect(text).toContain("🟢  1  ready at the gate")
+    expect(text).toContain("🚧  1  held by dependencies")
     expect(text).toContain("waiting for ENG-12 (backlog)")
-    expect(text).toContain("whipper crack")
-    expect(text).not.toContain("\u001B[")
+    expect(text).toContain("whipper crack ⚡")
+    expect(text).toContain("🐎")
   })
 
   it("renders a compact ledger with human token units", () => {
@@ -66,7 +66,7 @@ describe("friendly CLI skin", () => {
 
   it("does not claim a dry run reached the real human gate", () => {
     expect(renderDeliveryResult("ENG-12", "delivered", {}, true)).toContain("practice route complete")
-    expect(renderDeliveryResult("ENG-12", "failed", {}, true)).toContain("×")
+    expect(renderDeliveryResult("ENG-12", "failed", {}, true)).toContain("❌")
   })
 
   it("explains configured harnesses and project hitching", () => {

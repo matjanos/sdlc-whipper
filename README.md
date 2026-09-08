@@ -1,5 +1,9 @@
 # Whipper
 
+<p align="center">
+  <img src="assets/whipper-logo.png" alt="Whipper logo" width="320">
+</p>
+
 [![CI](https://github.com/matjanos/sdlc-whipper/actions/workflows/ci.yml/badge.svg)](https://github.com/matjanos/sdlc-whipper/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
