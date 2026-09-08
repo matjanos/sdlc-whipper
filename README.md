@@ -1,5 +1,8 @@
 # Whipper
 
+[![CI](https://github.com/matjanos/sdlc-whipper/actions/workflows/ci.yml/badge.svg)](https://github.com/matjanos/sdlc-whipper/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A steady, deterministic hand for a team of software-delivery agents. Each agent has a focused harness and limited context; Whipper keeps them moving along one bounded route: backlog grooming → acceptance-test-first planning → implementation → review → preview testing → PR.
 
 Agents do the thinking. **Whipper sets the route, pace, limits, and side effects.** It never merges.
@@ -94,7 +97,7 @@ split → research → [council if confidence=low] → execute ⇄ review (≤3 
 
 ## Budgets & ledger
 
-Every model call is recorded with run/ticket/phase/agent tags. Before each prompt the conductor asserts the per-task budget (`perTaskUsd` / `perTaskTokens`) and kills sessions (`interruptAll`) + escalates when exceeded. `sdlc ledger` answers "what did delivering LIN-123 cost?".
+Every model call is recorded with run/ticket/phase/agent tags. Before each prompt the conductor asserts the per-task budget (`perTaskUsd` / `perTaskTokens`) and kills sessions (`interruptAll`) + escalates when exceeded. `whipper ledger` answers "what did delivering LIN-123 cost?".
 
 Cost attribution: usage events carry the server-computed `cost`; offline rollups stay token-based, and `SDL_LIVE_SMOKE=1 pnpm test -- test/runtime-live.spec.ts` re-verifies the event→ledger feed against the real server in seconds.
 
@@ -125,7 +128,7 @@ examples/sdlc.config.json
 
 ## Roadmap & known spikes
 
-- **M1 ✅** `sdlc status` — read-only reconciliation.
+- **M1 ✅** `whipper status` — read-only reconciliation.
 - **M2 ✅** engine: SDK host, agent registry (7 agents, real permission sets), ledger, budget, dry-run; full pipeline walks offline (fake) and is wired for real.
 - **M3 🟡** PR plumbing is now hardened and contract-tested: uncommitted executor edits are committed/pushed, reruns reuse an existing open PR, GitHub checks are polled, and Vercel preview readiness has URL-probe + MCP deployment-state adapters. Remaining: run one real PR against a deployed target repo and verify preview/Neon teardown.
 - **M4 ⬜** real prompts per phase (the ones in `prompts/` are deliberately stub-grade), enabled one phase at a time behind flags.
