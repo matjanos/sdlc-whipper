@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>sdLC — cockpit</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%2346d68c'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -349,7 +350,8 @@ function renderFloor(s){
   const lanes = [];
   // in-flight & recent runs
   for(const r of s.runs.slice(0, 6)){
-    lanes.push({ key: r.ticket, title: r.title ?? "", status: r.status, phase: r.phaseReached, agents: byTicket.get(r.ticket) ?? [] });
+    const phase = r.phaseReached === "await-preview" ? "preview" : r.phaseReached;
+    lanes.push({ key: r.ticket, title: r.title ?? "", status: r.status, phase, agents: byTicket.get(r.ticket) ?? [] });
   }
   // tickets with live sessions but no run state yet
   for(const [k, agents] of byTicket){
