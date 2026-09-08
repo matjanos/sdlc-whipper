@@ -133,7 +133,11 @@ export function renderRunSummary(
   if (ledger.length > 0) {
     lines.push("", bold("SPEND", color))
     for (const row of ledger) {
-      lines.push(`  ${key(row.key, color)}  $${row.costUsd.toFixed(2)} · ${formatTokens(row.tokens)} tokens · ${row.runs} calls`)
+      const cost = row.costUsd > 0 ? `$${row.costUsd.toFixed(2)}` : dim("no metered cost", color)
+      lines.push(`  ${key(row.key, color)}  ${cost} · ${formatTokens(row.tokens)} tokens · ${row.runs} calls`)
+    }
+    if (ledger.every((row) => row.costUsd === 0)) {
+      lines.push(dim("  these models report $0 to the server (subscription plan) — tokens are the real meter", color))
     }
   }
   return lines.join("\n")
@@ -195,6 +199,9 @@ export function renderLedger(
   lines.push(
     `${bold("TOTAL".padEnd(26), color)} ${String(total.calls).padStart(7)} ${formatTokens(total.tokens).padStart(10)} ${`$${total.cost.toFixed(2)}`.padStart(9)}`,
   )
+  if (total.cost === 0 && total.tokens > 0) {
+    lines.push(dim("these models report no metered cost (subscription plan) — treat tokens as the spend", color))
+  }
   return lines.join("\n")
 }
 

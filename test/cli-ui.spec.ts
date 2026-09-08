@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { renderDeliveryResult, renderHelp, renderLedger, renderStatus } from "../src/cli/ui.js"
+import { renderDeliveryResult, renderHelp, renderLedger, renderRunSummary, renderStatus } from "../src/cli/ui.js"
 import type { StatusReport } from "../src/conductor/status.js"
 
 const report: StatusReport = {
@@ -41,6 +41,19 @@ describe("friendly CLI skin", () => {
     expect(text).toContain("12.5k")
     expect(text).toContain("$1.25")
     expect(text).toContain("TOTAL")
+  })
+
+  it("labels zero-cost spend as plan-covered instead of a misleading $0", () => {
+    const summary = renderRunSummary(
+      [{ key: "ENG-12", status: "delivered" }],
+      [{ key: "ENG-12", runs: 35, tokens: 4_036_600, costUsd: 0 }],
+    )
+    expect(summary).toContain("no metered cost")
+    expect(summary).toContain("4.0m tokens")
+    expect(summary).toContain("tokens are the real meter")
+
+    const ledger = renderLedger("ticket", [{ key: "ENG-12", runs: 35, tokens: 4_036_600, costUsd: 0 }])
+    expect(ledger).toContain("no metered cost")
   })
 
   it("does not claim a dry run reached the real human gate", () => {
