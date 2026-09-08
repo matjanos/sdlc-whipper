@@ -27,10 +27,11 @@ export function colorEnabled(): boolean {
 }
 
 /** Live spinners — the shutdown coordinator freezes them for a clean last frame. */
-const active = new Set<{ clear(): void }>()
+const active = new Set<{ clear(): void; halt(): void }>()
 
+/** Halt all rendering (intervals + line) — used by graceful shutdown. */
 export function stopActiveSpinners(): void {
-  for (const spinner of active) spinner.clear()
+  for (const spinner of active) spinner.halt()
   active.clear()
   rendering = undefined
 }
@@ -91,6 +92,14 @@ export function createSpinner(opts: { enabled?: boolean; stream?: { write(text: 
     stream.write(`\r\u001B[2K`)
   }
 
+  const halt = (): void => {
+    if (timer) {
+      clearInterval(timer)
+      timer = undefined
+    }
+    clear()
+  }
+
   // While rendering, route logger writes around this line (see log.ts).
   const renderer = {
     clear,
@@ -100,7 +109,7 @@ export function createSpinner(opts: { enabled?: boolean; stream?: { write(text: 
     },
   }
 
-  const handle = { clear }
+  const handle = { clear, halt }
 
   const api: Spinner = {
     start(initial: string): void {

@@ -5,6 +5,7 @@ import {
   clearActiveSpinnerLine,
   redrawActiveSpinnerLine,
   renderTrail,
+  stopActiveSpinners,
 } from "../src/util/progress.js"
 import { stamp, formatClock } from "../src/util/format.js"
 
@@ -42,6 +43,18 @@ describe("spinner (terminal loader)", () => {
     s.start("research · researcher")
     s.stop("✓ research 0:31")
     expect(stream.written().endsWith("✓ research 0:31\n")).toBe(true)
+  })
+
+  it("halt (shutdown) kills the interval — no frames after stopping the world", () => {
+    vi.useFakeTimers()
+    const s = createSpinner({ enabled: true, stream })
+    s.start("split — working")
+    vi.advanceTimersByTime(90)
+    const writesAtHalt = stream.write.mock.calls.length
+    stopActiveSpinners()
+    vi.advanceTimersByTime(500)
+    expect(stream.write.mock.calls.length).toBe(writesAtHalt + 1) // only the final clear
+    vi.useRealTimers()
   })
 
   it("lets a logger share the cursor: clear before its line, redraw after", () => {
@@ -87,5 +100,15 @@ describe("trail and wall-clock stamps", () => {
 
   it("formatClock renders HH:MM:SS", () => {
     expect(formatClock(new Date("2026-09-08T21:37:25"))).toBe("21:37:25")
+  })
+
+  it("caps the stamp gap on ultrawide terminals", () => {
+    const original = process.stdout.columns
+    Object.defineProperty(process.stdout, "columns", { value: 300, configurable: true })
+    const line = stamp("🐎 WHIPPER", {}, new Date("2026-09-08T21:37:25"))
+    expect(line.length).toBeLessThan(130) // no 250-space void
+    expect(line).toContain("21:37:25")
+    if (original === undefined) delete (process.stdout as { columns?: number }).columns
+    else Object.defineProperty(process.stdout, "columns", { value: original, configurable: true })
   })
 })

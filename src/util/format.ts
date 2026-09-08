@@ -18,7 +18,8 @@ export function stamp(
 ): string {
   const clock = formatClock(date)
   const mark = options.color ? `\u001B[90m${clock}\u001B[0m` : clock
-  const width = process.stdout.columns ?? 80
+  // cap the pad: on ultrawide terminals a full-width gap looks broken
+  const width = Math.min(process.stdout.columns ?? 80, 120)
   const visible = line.replace(/\u001B\[[0-9;]*m/g, "").length
   if (visible >= width - 9) return `${line}  ${mark}`
   return `${line}${" ".repeat(Math.max(2, width - 9 - visible))}${mark}`
