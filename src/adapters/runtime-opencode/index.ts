@@ -1,10 +1,11 @@
-import type { AgentRuntime, LedgerStore, PromptOptions, RunContext } from "../../ports/index.js"
+import type { AgentActivity, AgentRuntime, LedgerStore, PromptOptions, RunContext } from "../../ports/index.js"
 import type { AgentRole, PromptParts } from "../../types.js"
 import { ModelCallFailedError } from "../../types.js"
 import { resolveModel } from "../../config.js"
 import { writeWorktreeAgentConfig, agentId } from "./agents.js"
 import { invalidModelRefs, type CatalogEntry } from "./models.js"
 import { usageEntryFromEvent } from "./usage.js"
+import { ActivityTracker } from "./activity.js"
 import { isTransient } from "../../conductor/retry.js"
 import { sleep } from "../../util/exec.js"
 
@@ -44,6 +45,8 @@ export interface OpenCodeRuntimeOptions {
   /** Directory sessions run in when the run has no worktree (grooming). */
   fallbackDirectory?: string
   ledger?: LedgerStore
+  /** Live agent-activity observer (spinner/UI). Registered once, fired on meaningful changes. */
+  onActivity?: (info: AgentActivity) => void
   /** Poll interval while waiting for an assistant message. */
   assistantPollMs?: number
   /** Absolute cap on waiting for one agent run (tool loops can be long). */
@@ -67,6 +70,7 @@ export class OpenCodeRuntime implements AgentRuntime {
   private run?: RunContext
   private readonly sessions = new Map<AgentRole, string>() // role → sessionID
   private readonly roleBySession = new Map<string, AgentRole>() // for usage attribution
+  private readonly activityObservers: ((info: AgentActivity) => void)[] = []
   private serviceUrl?: string
   private serviceHeaders?: Record<string, string>
   private closed = false
@@ -289,6 +293,22 @@ export class OpenCodeRuntime implements AgentRuntime {
     }
   }
 
+  /** Port hook: register the live activity observer (spinner/UI). */
+  activityFeed(cb: (info: AgentActivity) => void): void {
+    this.activityObservers.push(cb)
+  }
+
+  private emitActivity(info: AgentActivity): void {
+    if (this.opts.onActivity) this.opts.onActivity(info)
+    for (const cb of this.activityObservers) {
+      try {
+        cb(info)
+      } catch {
+        /* a UI observer must never break the run */
+      }
+    }
+  }
+
   /**
    * Ledger feed: stream server events and map `session.usage.updated` events
    * to ledger entries. Strict ownership — only sessions this run created are
@@ -298,21 +318,31 @@ export class OpenCodeRuntime implements AgentRuntime {
    */
   private async consumeEvents(): Promise<void> {
     const host = this.host
-    if (!host || !this.opts.ledger || !this.run) return
+    if (!host || !this.run) return
     const run = this.run
+    const owned = (sid: string): AgentRole | undefined => {
+      for (const [role, s] of this.sessions) if (s === sid) return role
+      return undefined
+    }
+    const tracker = this.opts.onActivity || this.activityObservers.length > 0
+      ? new ActivityTracker({ owned, onActivity: (info) => this.emitActivity(info) })
+      : undefined
     try {
       for await (const raw of host.events.subscribe()) {
         if (this.closed || !this.host) break
         for (const [role, sid] of this.sessions) this.roleBySession.set(sid, role)
-        const entry = usageEntryFromEvent(raw, this.roleBySession, {
-          runId: run.runId,
-          ticket: run.ticket,
-          modelFor: (role) => {
-            const ref = this.modelRef(role)
-            return ref ? `${ref.providerID}/${ref.id}` : undefined
-          },
-        })
-        if (entry) await this.opts.ledger.record(entry)
+        if (this.opts.ledger) {
+          const entry = usageEntryFromEvent(raw, this.roleBySession, {
+            runId: run.runId,
+            ticket: run.ticket,
+            modelFor: (role) => {
+              const ref = this.modelRef(role)
+              return ref ? `${ref.providerID}/${ref.id}` : undefined
+            },
+          })
+          if (entry) await this.opts.ledger.record(entry)
+        }
+        tracker?.observe(raw)
       }
     } catch {
       // event stream ended or host closed — nothing to do

@@ -6,6 +6,7 @@ import { createLogger } from "./util/log.js"
 import { createDeps, type RuntimeMode } from "./adapters/index.js"
 import { buildStatus } from "./conductor/status.js"
 import { deliverTask, runTick } from "./conductor/tick.js"
+import { setProgressDisabled } from "./util/progress.js"
 import type { AgentRole } from "./types.js"
 import {
   renderDeliveryResult,
@@ -49,6 +50,7 @@ async function main(): Promise<void> {
   const log = createLogger(debug ? "debug" : "info", { pretty: !debug })
   const configPath = flagString(args.flags, "config")
   const dryRun = flagBool(args.flags, "dry-run")
+  setProgressDisabled(!color)
 
   try {
     const config = await loadConfig(configPath)

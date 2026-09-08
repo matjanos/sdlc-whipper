@@ -14,6 +14,9 @@ const green = (text: string, color: boolean): string => esc(32, text, color)
 const yellow = (text: string, color: boolean): string => esc(33, text, color)
 const red = (text: string, color: boolean): string => esc(31, text, color)
 const cyan = (text: string, color: boolean): string => esc(36, text, color)
+const magenta = (text: string, color: boolean): string => esc(35, text, color)
+
+const BRAND = (color: boolean): string => `${magenta("🐎", color)} ${bold("WHIPPER", color)}  ${cyan("♞", color)}`
 
 export function shouldUseColor(flags: Map<string, string | boolean>): boolean {
   return Boolean(process.stdout.isTTY && process.env["NO_COLOR"] === undefined && !flags.has("plain"))
@@ -22,24 +25,21 @@ export function shouldUseColor(flags: Map<string, string | boolean>): boolean {
 export function renderHelp(options: UiOptions = {}): string {
   const color = options.color ?? false
   return [
-    `${bold("WHIPPER", color)}  ${cyan("♞", color)}  ${dim("a steady hand for your agent team", color)}`,
+    `${BRAND(color)}  ${dim("a steady hand for your agent team", color)}`,
     "",
     `Each agent works in a focused harness. ${bold("Whipper sets the route, pace, and limits.", color)}`,
-    "Merging always stays human.",
+    "Merging always stays human. 🤝",
     "",
-    bold("USAGE", color),
-    "  whipper <command> [options]",
+    bold("👀 SEE THE TEAM", color),
+    `  ${cyan("status", color)}                 🧭 Ready, blocked, waiting, and in-flight work`,
+    `  ${cyan("harness", color)}                🛠️  Inspect each agent's role, model, and step limit`,
+    `  ${cyan("hitch", color)}                  🪢 Verify the team is connected to this project`,
+    `  ${cyan("cockpit", color)}               🎛️  Open the live project cockpit`,
+    `  ${cyan("ledger", color)}                🧾 Cost and token usage by ticket, phase, run, or agent`,
     "",
-    bold("SEE THE TEAM", color),
-    `  ${cyan("status", color)}                 Ready, blocked, waiting, and in-flight work`,
-    `  ${cyan("harness", color)}                Inspect each agent's role, model, and step limit`,
-    `  ${cyan("hitch", color)}                  Verify the team is connected to this project`,
-    `  ${cyan("cockpit", color)}               Open the live project cockpit`,
-    `  ${cyan("ledger", color)}                Cost and token usage by ticket, phase, run, or agent`,
-    "",
-    bold("MOVE THE TEAM", color),
-    `  ${green("crack", color)}                  Crack the whip: reconcile and dispatch the team`,
-    `  ${green("hit", color)} ${dim("<KEY>", color)}              Target one durable ticket directly`,
+    bold("🚀 MOVE THE TEAM", color),
+    `  ${green("crack", color)}                  ⚡ Crack the whip: reconcile and dispatch the team`,
+    `  ${green("hit", color)} ${dim("<KEY>", color)}              🎯 Target one durable ticket directly`,
     "",
     bold("FIRST RIDE", color),
     `  ${dim("$", color)} whipper status`,
@@ -64,50 +64,50 @@ export function renderStatus(report: StatusReport, options: UiOptions = {}): str
   const color = options.color ?? false
   const { budget } = report.config
   const lines = [
-    `${bold("WHIPPER", color)}  ${dim(`team ${report.workspace.team} · ${report.config.adapters}`, color)}`,
+    `${BRAND(color)}  ${dim(`team ${report.workspace.team} · ${report.config.adapters}`, color)}`,
     rule(color),
-    metric(green("●", color), report.ready.length, "ready at the gate"),
-    metric(yellow("◆", color), report.inFlight.length, `on the trail · cap ${budget.maxParallelDeliveries}`),
-    metric(red("■", color), report.blocked.length, "held by dependencies"),
-    metric(yellow("?", color), report.waitingForHuman.length, "waiting for you"),
+    metric("🟢", report.ready.length, "ready at the gate"),
+    metric("🐎", report.inFlight.length, `on the trail · cap ${budget.maxParallelDeliveries}`),
+    metric("🚧", report.blocked.length, "held by dependencies"),
+    metric("🙋", report.waitingForHuman.length, "waiting for you"),
     "",
   ]
 
-  section(lines, "READY AT THE GATE", report.ready, color, (t) => `${green("●", color)} ${key(t.key, color)}  ${t.title}`)
+  section(lines, "🟢 READY AT THE GATE", report.ready, color, (t) => `${green("●", color)} ${key(t.key, color)}  ${t.title}`)
   section(
     lines,
-    "ON THE TRAIL",
+    "🐎 ON THE TRAIL",
     report.inFlight,
     color,
     (t) => `${yellow("◆", color)} ${key(t.key, color)}  ${t.title}`,
   )
   section(
     lines,
-    "HELD BY DEPENDENCIES",
+    "🚧 HELD BY DEPENDENCIES",
     report.blocked,
     color,
-    (t) => `${red("■", color)} ${key(t.key, color)}  ${t.title}\n      ${dim(`waiting for ${t.blocker}`, color)}`,
+    (t) => `${red("■", color)} ${key(t.key, color)}  ${t.title}\n      ${dim(`⏳ waiting for ${t.blocker}`, color)}`,
   )
   section(
     lines,
-    "WAITING FOR YOU",
+    "🙋 WAITING FOR YOU",
     report.waitingForHuman,
     color,
     (t) => `${yellow("?", color)} ${key(t.key, color)}  ${t.title}`,
   )
 
-  lines.push(bold("NEXT MOVE", color))
+  lines.push(bold("🧭 NEXT MOVE", color))
   if (report.wouldDeliverNow > 0) {
-    lines.push(`  ${green("whipper crack", color)}  ${dim(`will dispatch ${report.wouldDeliverNow} ticket${report.wouldDeliverNow === 1 ? "" : "s"}`, color)}`)
+    lines.push(`  ${green("whipper crack ⚡", color)}  ${dim(`will dispatch ${report.wouldDeliverNow} ticket${report.wouldDeliverNow === 1 ? "" : "s"}`, color)}`)
   } else if (report.waitingForHuman.length > 0) {
-    lines.push(`  ${yellow("Open the tracker", color)}  ${dim("an agent is waiting for human context", color)}`)
+    lines.push(`  ${yellow("Open the tracker", color)}  ${dim("an agent is waiting for human context 🙋", color)}`)
   } else {
-    lines.push(`  ${dim("Nothing to dispatch right now.", color)}`)
+    lines.push(`  ${dim("Nothing to dispatch right now. ☕", color)}`)
   }
   lines.push("")
   lines.push(
     dim(
-      `guardrails  $${budget.perTaskUsd}/task · ${formatTokens(budget.perTaskTokens)} tokens/task · ${report.config.phasesEnabled.length > 0 ? `${report.config.phasesEnabled.length} phases` : "default route"}${report.config.dryRun ? " · DRY RUN" : ""}`,
+      `🛡️  guardrails  $${budget.perTaskUsd}/task · ${formatTokens(budget.perTaskTokens)} tokens/task · ${report.config.phasesEnabled.length > 0 ? `${report.config.phasesEnabled.length} phases` : "default route"}${report.config.dryRun ? " · 🎬 DRY RUN" : ""}`,
       color,
     ),
   )
@@ -116,7 +116,7 @@ export function renderStatus(report: StatusReport, options: UiOptions = {}): str
 
 export function renderRunStart(repoRoot: string, dryRun: boolean, options: UiOptions = {}): string {
   const color = options.color ?? false
-  return `${bold("WHIPPER", color)}  ${dryRun ? yellow("dry run", color) : green("team moving", color)}\n${dim(repoRoot, color)}\n${rule(color)}`
+  return `${BRAND(color)}  ${dryRun ? yellow("🎬 dry run", color) : green("🚀 team moving", color)}\n${dim(repoRoot, color)}\n${rule(color)}`
 }
 
 export function renderRunSummary(
@@ -127,19 +127,19 @@ export function renderRunSummary(
   const color = options.color ?? false
   const moved = candidates.filter((candidate) => candidate.status !== "skipped").length
   const skipped = candidates.length - moved
-  const lines = ["", bold("RIDE COMPLETE", color), `${green("●", color)} ${moved} moved   ${dim(`○ ${skipped} stayed put`, color)}`]
+  const lines = ["", bold("🏁 RIDE COMPLETE", color), `${green("✅", color)} ${moved} moved   ${dim(`○ ${skipped} stayed put`, color)}`]
   for (const candidate of candidates) {
     const icon = candidate.status === "skipped" ? dim("○", color) : statusIcon(candidate.status, color)
     lines.push(`  ${icon} ${key(candidate.key, color)}  ${candidate.status}${candidate.reason ? dim(` · ${candidate.reason}`, color) : ""}`)
   }
   if (ledger.length > 0) {
-    lines.push("", bold("SPEND", color))
+    lines.push("", bold("💸 SPEND", color))
     for (const row of ledger) {
       const cost = row.costUsd > 0 ? `$${row.costUsd.toFixed(2)}` : dim("no metered cost", color)
       lines.push(`  ${key(row.key, color)}  ${cost} · ${formatTokens(row.tokens)} tokens · ${row.runs} calls`)
     }
     if (ledger.every((row) => row.costUsd === 0)) {
-      lines.push(dim("  these models report $0 to the server (subscription plan) — tokens are the real meter", color))
+      lines.push(dim("  💳 these models report $0 to the server (subscription plan) — tokens are the real meter", color))
     }
   }
   return lines.join("\n")
@@ -148,10 +148,10 @@ export function renderRunSummary(
 export function renderDeliveryStart(keyName: string, title: string, dryRun: boolean, options: UiOptions = {}): string {
   const color = options.color ?? false
   return [
-    `${bold("WHIPPER", color)}  ${dryRun ? yellow("practice harness", color) : green("ticket harnessed", color)}`,
+    `${BRAND(color)}  ${dryRun ? yellow("🎬 practice harness", color) : green("🎯 ticket harnessed", color)}`,
     rule(color),
-    `${green("●", color)} ${key(keyName, color)}  ${title}`,
-    dim("  split → research → execute ⇄ review → publish → preview → test", color),
+    `📦 ${key(keyName, color)}  ${title}`,
+    dim("  📋 split → 🔍 research → ⚙️  execute ⇄ 🔍 review → 🚀 publish → 🌍 preview → 🧪 test", color),
   ].join("\n")
 }
 
@@ -163,11 +163,11 @@ export function renderDeliveryResult(
 ): string {
   const color = options.color ?? false
   const friendly: Record<RunStatus, string> = {
-    delivered: "arrived at the human gate",
+    delivered: "arrived at the human gate 🚪",
     "dry-run": "practice route complete",
-    parked: "parked safely",
-    escalated: "waiting for human guidance",
-    failed: "stopped safely",
+    parked: "parked safely ⏳",
+    escalated: "waiting for human guidance 🙋",
+    failed: "stopped safely 🛟",
   }
   const message = dryRun && status === "delivered" ? friendly["dry-run"] : friendly[status]
   const displayedStatus = dryRun && status === "delivered" ? "dry-run" : status
@@ -184,7 +184,7 @@ export interface HarnessRow {
 export function renderHarnesses(rows: HarnessRow[], options: UiOptions = {}): string {
   const color = options.color ?? false
   const lines = [
-    `${bold("HARNESSES", color)}  ${cyan("♞", color)}  ${dim(`${rows.length} restrained specialists`, color)}`,
+    `${bold("🛠️  HARNESSES", color)}  ${cyan("♞", color)}  ${dim(`${rows.length} restrained specialists`, color)}`,
     rule(color),
     `${dim("ROLE".padEnd(14), color)} ${dim("CLASS".padEnd(12), color)} ${dim("MODEL", color)}`,
   ]
@@ -210,7 +210,7 @@ export interface HitchReport {
 export function renderHitch(report: HitchReport, options: UiOptions = {}): string {
   const color = options.color ?? false
   return [
-    `${bold("HITCHED", color)}  ${green("● project team connected", color)}`,
+    `${bold("🪢 HITCHED", color)}  ${green("🟢 project team connected", color)}`,
     rule(color),
     `${bold("project", color).padEnd(color ? 22 : 14)} ${report.project}`,
     `${bold("team", color).padEnd(color ? 22 : 14)} ${report.team}`,
@@ -233,10 +233,10 @@ export function renderLedger(
 ): string {
   const color = options.color ?? false
   if (rows.length === 0) {
-    return `${bold("LEDGER", color)}\n${dim("No model usage recorded yet.", color)}`
+    return `${bold("🧾 LEDGER", color)}\n${dim("No model usage recorded yet. 💤", color)}`
   }
   const lines = [
-    `${bold("LEDGER", color)}  ${dim(`grouped by ${by}`, color)}`,
+    `${bold("🧾 LEDGER", color)}  ${dim(`grouped by ${by}`, color)}`,
     rule(color),
     `${dim("NAME".padEnd(26), color)} ${dim("CALLS".padStart(7), color)} ${dim("TOKENS".padStart(10), color)} ${dim("COST".padStart(9), color)}`,
   ]
@@ -255,14 +255,14 @@ export function renderLedger(
     `${bold("TOTAL".padEnd(26), color)} ${String(total.calls).padStart(7)} ${formatTokens(total.tokens).padStart(10)} ${`$${total.cost.toFixed(2)}`.padStart(9)}`,
   )
   if (total.cost === 0 && total.tokens > 0) {
-    lines.push(dim("these models report no metered cost (subscription plan) — treat tokens as the spend", color))
+    lines.push(dim("💳 these models report no metered cost (subscription plan) — treat tokens as the spend", color))
   }
   return lines.join("\n")
 }
 
 export function renderError(message: string, options: UiOptions = {}): string {
   const color = options.color ?? false
-  return `${red("■ STOPPED SAFELY", color)}\n${message}\n${dim("No merge was performed. Re-run with --debug for detail.", color)}`
+  return `${red("🛑 STOPPED SAFELY", color)}\n${message}\n${dim("No merge was performed. Re-run with --debug for detail.", color)}`
 }
 
 export function formatTokens(tokens: number): string {
@@ -297,7 +297,10 @@ function section<T>(
 }
 
 function statusIcon(status: string, color: boolean): string {
-  if (status === "delivered" || status === "dry-run") return green("✓", color)
-  if (status === "parked" || status === "escalated") return yellow("?", color)
-  return red("×", color)
+  void color
+  if (status === "delivered") return "✅"
+  if (status === "dry-run") return "🎬"
+  if (status === "parked") return "⏸️"
+  if (status === "escalated") return "🙋"
+  return "❌"
 }

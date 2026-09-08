@@ -24,6 +24,14 @@ export interface AgentRuntime {
 
   prompt(role: AgentRole, parts: PromptParts, opts?: PromptOptions): Promise<string>
 
+  /**
+   * Subscribe to live agent activity (tool calls, composition phases, token
+   * burn) for the caller's UI. Optional: runtimes without a feed simply don't
+   * implement it. The callback fires at most per meaningful change — not per
+   * stream delta.
+   */
+  activityFeed?(cb: (info: AgentActivity) => void): void
+
   /** Budget enforcement / kill switch for one role. Must be safe to call when no session exists. */
   interrupt(role: AgentRole): Promise<void>
 
@@ -31,4 +39,13 @@ export interface AgentRuntime {
   interruptAll(): Promise<void>
 
   close(): Promise<void>
+}
+
+/** Domain-level view of what an agent is doing right now. */
+export interface AgentActivity {
+  role: AgentRole
+  /** Short human phrase, e.g. `read src/store.js`, `bash gh run watch…`, `composing`. */
+  text: string
+  /** Cumulative tokens for the run so far, when known. */
+  tokens?: number
 }
