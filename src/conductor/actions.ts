@@ -91,6 +91,8 @@ export async function escalate(
           ? "Stopped: the per-task budget was exceeded."
           : tag === "test-failed"
             ? "Stopped: the tester rejected the change on the preview environment."
+            : tag === "provider-rate-limit"
+            ? "Stopped: the model provider hit its usage limit."
             : "Stopped: an unexpected error occurred in the pipeline."
   const full = `${marker}\n## ${heading}\n\n${body}\n\n_(sdlc conductor, tag: ${tag})_`
   if (deps.dryRun) {

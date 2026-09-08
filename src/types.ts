@@ -163,6 +163,19 @@ export type EscalationTag =
   | "budget-exceeded"
   | "phase-error"
   | "test-failed"
+  | "provider-rate-limit"
+
+/**
+ * The assistant message exists but carries a provider error — terminal for
+ * this attempt. Domain-level (not vendor): the conductor maps rate limits to
+ * a parked escalation, everything else to a phase failure.
+ */
+export class ModelCallFailedError extends Error {
+  constructor(detail: string) {
+    super(`model call failed inside the session — ${detail}`)
+    this.name = "ModelCallFailedError"
+  }
+}
 
 export type RunStatus =
   | "delivered"

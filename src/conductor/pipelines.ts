@@ -4,7 +4,7 @@ import type { PhaseName } from "../types.js"
 import type { ConductorDeps, Outcomes, TaskContext } from "./deps.js"
 import { escalate } from "./actions.js"
 import { withTransientRetry } from "./retry.js"
-import { BudgetExceededError, EscalationError, type RunStatus } from "../types.js"
+import { BudgetExceededError, EscalationError, ModelCallFailedError, type RunStatus } from "../types.js"
 import { VerdictParseError } from "../phases/shared.js"
 
 /**
@@ -179,6 +179,19 @@ async function handlePhaseError(
     await deps.runtime.interruptAll()
     await escalate(deps, task.ticket.key, "budget-exceeded", err.message)
     deps.log.warn(`${phase}: budget exceeded — parked`)
+    return "parked"
+  }
+  if (err instanceof ModelCallFailedError && /rate.?limit|usage limit|429/i.test(err.message)) {
+    // Provider quota windows reset on their own schedule — retrying here would
+    // burn the polling loop against a wall. Park the ticket; a later tick or
+    // `sdlc deliver` resumes it.
+    await escalate(
+      deps,
+      task.ticket.key,
+      "provider-rate-limit",
+      `${err.message}\n\nThe conductor does not retry automatically. Wait for the provider window to reset, then run another tick (or \`sdlc deliver ${task.ticket.key}\`).`,
+    )
+    deps.log.warn(`${phase}: provider rate limit — parked`)
     return "parked"
   }
   const detail =

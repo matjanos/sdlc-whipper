@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { loadPhases } from "../phases/registry.js"
 import { selectorFor } from "../config.js"
-import { moveTo } from "./actions.js"
+import { moveTo, escalate } from "./actions.js"
 import type { ConductorDeps } from "./deps.js"
 import { Artifacts } from "./artifacts.js"
 import { runBatchPhase, runDeliveryPipeline } from "./pipelines.js"
@@ -173,7 +173,15 @@ export async function deliverTask(deps: ConductorDeps, ticket: Ticket): Promise<
   const task = { ticket, worktree, artifacts, deps, runId }
   await moveTo(deps, ticket.key, "inProgress")
 
-  await deps.runtime.open({ runId, ticket: ticket.key, worktree })
+  try {
+    await deps.runtime.open({ runId, ticket: ticket.key, worktree })
+  } catch (err) {
+    // Runtime setup failures (bad model config, unreachable server) must land
+    // on the ticket, not kill the whole tick — later candidates still deliver.
+    log.error(`runtime setup failed: ${(err as Error).message}`)
+    await escalate(deps, ticket.key, "phase-error", `Runtime setup failed:\n\n\`\`\`\n${(err as Error).message}\n\`\`\``)
+    return "failed"
+  }
   let status: RunStatus
   let phaseReached: string
   let outcomes: Record<string, unknown>

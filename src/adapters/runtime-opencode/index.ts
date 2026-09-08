@@ -1,9 +1,15 @@
 import type { AgentRuntime, LedgerStore, PromptOptions, RunContext } from "../../ports/index.js"
-import type { AgentRole, LedgerEntry, PromptParts } from "../../types.js"
+import type { AgentRole, PromptParts } from "../../types.js"
+import { ModelCallFailedError } from "../../types.js"
 import { resolveModel } from "../../config.js"
 import { writeWorktreeAgentConfig, agentId } from "./agents.js"
+import { invalidModelRefs, type CatalogEntry } from "./models.js"
+import { usageEntryFromEvent } from "./usage.js"
 import { isTransient } from "../../conductor/retry.js"
 import { sleep } from "../../util/exec.js"
+
+/** Domain-level error; conductor maps provider rate limits to parked escalations. */
+export { ModelCallFailedError }
 
 /**
  * Structural types for the OpenCode V2 client. Kept local on purpose: generated
@@ -44,14 +50,6 @@ export interface OpenCodeRuntimeOptions {
   assistantMaxMs?: number
 }
 
-/** The assistant message exists but carries a provider error — terminal for this attempt. */
-export class ModelCallFailedError extends Error {
-  constructor(detail: string) {
-    super(`opencode runtime: model call failed inside the session — ${detail}`)
-    this.name = "ModelCallFailedError"
-  }
-}
-
 /**
  * AgentRuntime over the OpenCode V2 background-service client. The embedded
  * SDK's current dev package cannot be imported under Node ESM (its server
@@ -68,6 +66,9 @@ export class OpenCodeRuntime implements AgentRuntime {
   private host?: SdkHost
   private run?: RunContext
   private readonly sessions = new Map<AgentRole, string>() // role → sessionID
+  private readonly roleBySession = new Map<string, AgentRole>() // for usage attribution
+  private serviceUrl?: string
+  private serviceHeaders?: Record<string, string>
   private closed = false
 
   constructor(private readonly opts: OpenCodeRuntimeOptions) {}
@@ -86,9 +87,12 @@ export class OpenCodeRuntime implements AgentRuntime {
       { Service: { ensure(): Promise<{ url: string }>; headers(endpoint: { url: string }): Record<string, string> | undefined } },
     ]
     const endpoint = await Service.ensure()
+    const headers = Service.headers(endpoint)
+    this.serviceUrl = endpoint.url
+    this.serviceHeaders = headers
     const client = OpenCode.make({
       baseUrl: endpoint.url,
-      headers: Service.headers(endpoint),
+      headers,
     })
     this.host = {
       sessions: client.session,
@@ -104,11 +108,50 @@ export class OpenCodeRuntime implements AgentRuntime {
   async open(run: RunContext): Promise<void> {
     this.run = run
     this.sessions.clear()
+    this.roleBySession.clear()
     this.closed = false
     if (run.worktree) {
       writeWorktreeAgentConfig(this.opts.config, run.worktree)
     }
     await this.ensureHost()
+    await this.preflightModels()
+  }
+
+  /**
+   * Fail fast on unknown model refs: switchModel accepts bogus ids silently
+   * and the session then hangs until polling dies — a typo must cost one
+   * second, not a delivery. Validates the configured refs against the live
+   * catalog (`GET /api/model`); if the catalog is unreachable (older server,
+   * transient blip) validation is skipped rather than blocking deliveries.
+   */
+  private async preflightModels(): Promise<void> {
+    const roles = Object.keys(this.opts.config.raw.agents ?? {}) as AgentRole[]
+    const refs = roles
+      .map((role) => ({ role, parsed: this.modelRef(role) }))
+      .filter((r): r is { role: AgentRole; parsed: NonNullable<(typeof r)["parsed"]> } => r.parsed !== undefined)
+    if (refs.length === 0) return
+    let catalog: CatalogEntry[]
+    try {
+      catalog = await this.fetchModelCatalog()
+    } catch {
+      return // cannot validate without the catalog — never block a delivery on it
+    }
+    const problems = invalidModelRefs(refs, catalog)
+    if (problems.length > 0) {
+      throw new Error(
+        `opencode runtime: unknown model configuration(s) — check models/agents in .sdlc/config.json (see \`opencode models\`):\n` +
+          problems.map((p) => `  ${p.role}: ${p.ref} — ${p.detail}`).join("\n"),
+      )
+    }
+  }
+
+  private async fetchModelCatalog(): Promise<CatalogEntry[]> {
+    if (!this.serviceUrl) throw new Error("service endpoint unknown")
+    const res = await fetch(`${this.serviceUrl}/api/model`, { headers: this.serviceHeaders })
+    if (!res.ok) throw new Error(`GET /api/model → ${res.status}`)
+    const raw: unknown = await res.json()
+    const list = (raw as Record<string, unknown>)?.data ?? raw
+    return Array.isArray(list) ? (list as CatalogEntry[]) : []
   }
 
   private async sessionFor(role: AgentRole, fresh: boolean): Promise<string> {
@@ -120,6 +163,7 @@ export class OpenCodeRuntime implements AgentRuntime {
       title: `sdlc:${this.run?.ticket ?? "?"}:${role}`,
     })
     this.sessions.set(role, session.id)
+    this.roleBySession.set(session.id, role)
     return session.id
   }
 
@@ -246,45 +290,29 @@ export class OpenCodeRuntime implements AgentRuntime {
   }
 
   /**
-   * Ledger feed: stream server events, pick token-usage-carrying messages,
-   * attribute them to this run's roles via the sessionID→role map.
-   * Event payload shape is defensive by design (M2 spike verifies it).
+   * Ledger feed: stream server events and map `session.usage.updated` events
+   * to ledger entries. Strict ownership — only sessions this run created are
+   * attributed; the stream is server-global and foreign sessions (the user's
+   * own opencode work) must never pollute the ledger. Shape handling lives in
+   * usage.ts (fixtures: test/runtime-usage.spec.ts).
    */
   private async consumeEvents(): Promise<void> {
     const host = this.host
     if (!host || !this.opts.ledger || !this.run) return
-    const roleBySession = new Map<string, AgentRole>()
+    const run = this.run
     try {
       for await (const raw of host.events.subscribe()) {
         if (this.closed || !this.host) break
-        const ev = raw as Record<string, any>
-        const sessionID: string | undefined = ev.sessionID ?? ev.info?.sessionID ?? ev.properties?.sessionID
-        if (sessionID) {
-          for (const [role, sid] of this.sessions) if (sid === sessionID) roleBySession.set(sid, role)
-        }
-        const tokens = ev.tokens ?? ev.usage ?? ev.info?.tokens ?? ev.info?.usage
-        if (!tokens || typeof tokens !== "object") continue
-        const input = Number(tokens.input ?? tokens.inputTokens ?? 0)
-        const output = Number(tokens.output ?? tokens.outputTokens ?? 0)
-        if (input + output === 0) continue
-        const role = (sessionID ? roleBySession.get(sessionID) : undefined) ?? "groomer"
-        const entry: LedgerEntry = {
-          runId: this.run.runId,
-          ticket: this.run.ticket,
-          phase: "tick",
-          agent: role,
-          model: typeof ev.model === "string" ? ev.model : ev.info?.model,
-          ts: new Date().toISOString(),
-          tokens: {
-            input,
-            output,
-            cacheRead: Number(tokens.cacheRead ?? tokens.cache_read ?? 0) || undefined,
-            cacheWrite: Number(tokens.cacheWrite ?? tokens.cache_write ?? 0) || undefined,
+        for (const [role, sid] of this.sessions) this.roleBySession.set(sid, role)
+        const entry = usageEntryFromEvent(raw, this.roleBySession, {
+          runId: run.runId,
+          ticket: run.ticket,
+          modelFor: (role) => {
+            const ref = this.modelRef(role)
+            return ref ? `${ref.providerID}/${ref.id}` : undefined
           },
-          costUsd: null, // pricing: read from the model catalog once the event shape is verified (M2 spike)
-          sessionId: sessionID,
-        }
-        await this.opts.ledger.record(entry)
+        })
+        if (entry) await this.opts.ledger.record(entry)
       }
     } catch {
       // event stream ended or host closed — nothing to do

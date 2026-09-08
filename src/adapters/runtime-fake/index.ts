@@ -3,8 +3,8 @@ import type { LedgerStore } from "../../ports/index.js"
 import type { AgentRole, PromptParts } from "../../types.js"
 
 export interface FakeRuntimeOptions {
-  /** Per-role scripted outputs (consumed in order; falls back to defaults). */
-  script?: Partial<Record<AgentRole, string[]>>
+  /** Per-role scripted outputs (consumed in order; falls back to defaults). An Error entry is thrown — for provider-failure paths. */
+  script?: Partial<Record<AgentRole, (string | Error)[]>>
   /** Multiply emitted token counts — makes budget-exceeded paths testable. */
   tokenBoost?: number
   ledger?: LedgerStore
@@ -31,11 +31,15 @@ const DEFAULTS: Record<AgentRole, string> = {
  */
 export class FakeRuntime implements AgentRuntime {
   private run?: RunContext
-  private queue: Partial<Record<AgentRole, string[]>>
+  private queue: Partial<Record<AgentRole, (string | Error)[]>>
   readonly prompts: { role: AgentRole; text: string }[]
 
   constructor(private readonly opts: FakeRuntimeOptions = {}) {
-    this.queue = structuredClone(opts.script ?? {})
+    // Per-role array copy — NOT structuredClone: it downgrades custom Error
+    // subclasses to base Error, breaking instanceof-based flow control.
+    this.queue = Object.fromEntries(
+      Object.entries(opts.script ?? {}).map(([role, entries]) => [role, [...(entries ?? [])]]),
+    )
     this.prompts = opts.prompts ?? []
   }
 
@@ -47,6 +51,7 @@ export class FakeRuntime implements AgentRuntime {
     this.prompts.push({ role, text: parts.text })
     const queue = this.queue[role]
     const output = queue?.shift() ?? DEFAULTS[role]!
+    if (output instanceof Error) throw output
     if (this.opts.ledger && this.run) {
       const est = Math.ceil((parts.text.length + output.length) / 4) * (this.opts.tokenBoost ?? 1)
       await this.opts.ledger.record({
