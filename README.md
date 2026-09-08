@@ -45,6 +45,14 @@ SDL_FAKE_TICKETS=./demo-tickets.json pnpm whipper crack --config <repo>/.sdlc/co
 pnpm whipper ledger --config <repo>/.sdlc/config.json
 ```
 
+These three commands are useful before letting anything loose: inspect the harnesses, confirm the project hitch, then check the backlog.
+
+```sh
+pnpm whipper harness --config <repo>/.sdlc/config.json
+pnpm whipper hitch --config <repo>/.sdlc/config.json
+pnpm whipper status --config <repo>/.sdlc/config.json
+```
+
 ### For real (against your repo + Linear + GitHub + Vercel)
 
 For a concrete six-ticket offline backlog and sibling test app, see [the Polish-law test request](examples/polish-law/README.md).
@@ -67,7 +75,7 @@ For a concrete six-ticket offline backlog and sibling test app, see [the Polish-
 | `whipper cockpit [--port 4747]` | Serve the live project cockpit |
 | `whipper ledger [--ticket KEY] [--by ticket\|phase\|run\|agent]` | Cost/token rollups per ticket, phase, run, or agent |
 
-The former `sdlc` binary remains an alias. `deliver` aliases `hit`; `run` and `tick` alias `crack`; `serve` aliases `cockpit`, so existing scripts keep working.
+The former `sdlc` binary remains an alias. `deliver` aliases `hit`; `run` and `tick` alias `crack`; `serve` aliases `cockpit`, so existing scripts keep working. Both `--flag value` and `--flag=value` syntax are supported.
 
 ## Ports & adapters
 
@@ -75,7 +83,7 @@ The core speaks five ports and zero vendor names. Swapping a vendor = writing an
 
 | Port | Default | Alternatives | Notes |
 |---|---|---|---|
-| `TicketTracker` | `linear` (GraphQL, API key) | `linear-mcp` (Linear's remote MCP, bearer token — one auth story for agents + conductor), `fake` | Jira would slot in here; contract in `test/tracker-contract.spec.ts` |
+| `TicketTracker` | `linear` (GraphQL, API key) | `linear-mcp` (Linear's remote MCP, bearer token — one auth story for agents + Whipper), `fake` | Jira would slot in here; contract in `test/tracker-contract.spec.ts` |
 | `CodeHost` | `github` (`gh` CLI) | `fake` | PRs, checks, the tester's approval |
 | `PreviewEnvironment` | `vercel` (URL probe) | `vercel-mcp` (real deployment state via Vercel MCP, probe fallback), `fake` | Observation-first: your repo's pipeline owns provisioning/teardown; Railway PR environments would implement `provision()` |
 | `AgentRuntime` | `opencode` (SDK embedded host) | `fake` (scripted, offline) | Agents are injected into each task worktree as `.opencode/opencode.json` — never committed, target repos stay untouched |
@@ -101,7 +109,7 @@ split → research → [council if confidence=low] → execute ⇄ review (≤3 
 
 ## Budgets & ledger
 
-Every model call is recorded with run/ticket/phase/agent tags. Before each prompt the conductor asserts the per-task budget (`perTaskUsd` / `perTaskTokens`) and kills sessions (`interruptAll`) + escalates when exceeded. `whipper ledger` answers "what did delivering LIN-123 cost?".
+Every model call is recorded with run/ticket/phase/agent tags. Before each prompt Whipper asserts the per-task budget (`perTaskUsd` / `perTaskTokens`) and kills sessions (`interruptAll`) + escalates when exceeded. `whipper ledger` answers "what did hitting LIN-123 cost?".
 
 Cost attribution: usage events carry the server-computed `cost`; offline rollups stay token-based, and `SDL_LIVE_SMOKE=1 pnpm test -- test/runtime-live.spec.ts` re-verifies the event→ledger feed against the real server in seconds.
 
@@ -122,11 +130,12 @@ src/
   types.ts               # domain vocabulary (no vendor types)
   ports/                 # the 5 interfaces
   adapters/              # linear · linear-mcp · github · vercel · vercel-mcp · opencode · fakes · ledger
-  conductor/             # tick loop, pipeline runner, budget, escalation, actions (dry-run-aware)
+  conductor/             # crack loop, pipeline runner, budget, escalation, actions (dry-run-aware)
+  cli/                   # friendly terminal presentation and status briefings
   phases/                # one file per phase + registry/base
   git/                   # worktrees, diff, commit, push
 prompts/                 # agents/*.md (system prompts) · phases/*.md (task templates) — versioned here
-test/                    # tick · firewall · loop · council · budget · config · tracker contract · linear-mcp
+test/                    # crack · firewall · loop · council · budget · config · tracker contract · linear-mcp
 examples/sdlc.config.json
 ```
 
@@ -140,4 +149,4 @@ examples/sdlc.config.json
 
 ## Safety model
 
-Merging is human-only. Agents run least-privilege (reviewer/council: no edit, no shell; executor: no `git push` — the conductor pushes). All state is reconstructable from the tracker + git, so crashes are free. One escalation comment per topic per ticket.
+Merging is human-only. Agents run least-privilege (reviewer/council: no edit, no shell; executor: no `git push` — Whipper pushes). All state is reconstructable from the tracker + git, so crashes are free. One escalation comment per topic per ticket.
