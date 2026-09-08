@@ -1,14 +1,37 @@
 {
-  "name": "sdlc-conductor",
+  "name": "sdlc-whipper",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "description": "A steady, deterministic hand for teams of software-delivery agents.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/matjanos/sdlc-whipper.git"
+  },
+  "bugs": {
+    "url": "https://github.com/matjanos/sdlc-whipper/issues"
+  },
+  "homepage": "https://github.com/matjanos/sdlc-whipper#readme",
+  "keywords": [
+    "ai-agents",
+    "sdlc",
+    "automation",
+    "developer-tools",
+    "opencode"
+  ],
   "type": "module",
   "bin": {
     "whipper": "dist/cli.js",
     "sdlc": "dist/cli.js"
   },
   "main": "dist/cli.js",
+  "files": [
+    "dist/",
+    "docs/cockpit.html",
+    "prompts/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "whipper": "tsx src/cli.ts",
     "sdlc": "tsx src/cli.ts",

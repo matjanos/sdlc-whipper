@@ -48,7 +48,7 @@ For a concrete six-ticket offline backlog and sibling test app, see [the Polish-
 2. **Auth**: `LINEAR_API_KEY` (graph adapter) or `LINEAR_MCP_TOKEN` (MCP adapter) · `gh auth login` · model-provider keys live in your opencode user config (the embedded SDK host reuses them).
 3. **Observe first**: `pnpm whipper status` — read-only, shows every candidate, blocker, and the recommended next move.
 4. **Practice**: `pnpm whipper hit --dry-run` — full pipeline, zero side effects.
-5. **Go live**: `pnpm whipper hit` (or `whipper deliver LIN-123` for one ticket).
+5. **Go live**: `pnpm whipper hit` (or `whipper crack LIN-123` for one ticket).
 
 ## Commands
 
@@ -56,11 +56,11 @@ For a concrete six-ticket offline backlog and sibling test app, see [the Polish-
 |---|---|
 | `whipper status [--json]` | A read-only team briefing: ready, blocked, waiting, and in-flight |
 | `whipper hit [--dry-run] [--runtime fake] [--no-groom]` | Scan the backlog and dispatch ready tickets (file-locked, crash-safe) |
-| `whipper deliver <KEY>` | Send one ticket through the delivery route |
+| `whipper crack <KEY>` | Send one durable ticket through the delivery route |
 | `whipper cockpit [--port 4747]` | Serve the live project cockpit |
 | `whipper ledger [--ticket KEY] [--by ticket\|phase\|run\|agent]` | Cost/token rollups per ticket, phase, run, or agent |
 
-The former `sdlc` binary remains an alias. `run` and `tick` alias `hit`; `serve` aliases `cockpit`, so existing scripts keep working.
+The former `sdlc` binary remains an alias. `deliver` aliases `crack`; `run` and `tick` alias `hit`; `serve` aliases `cockpit`, so existing scripts keep working.
 
 ## Ports & adapters
 
@@ -110,7 +110,7 @@ Cost attribution: usage events carry the server-computed `cost`; offline rollups
 
 ```
 src/
-  cli.ts                 # whipper status | hit | deliver | cockpit | ledger
+  cli.ts                 # whipper status | hit | crack | cockpit | ledger
   config.ts              # zod-validated .sdlc/config.json + selector mapping
   types.ts               # domain vocabulary (no vendor types)
   ports/                 # the 5 interfaces

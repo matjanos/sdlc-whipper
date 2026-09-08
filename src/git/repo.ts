@@ -35,7 +35,7 @@ async function commitIdentity(worktree: string): Promise<string[]> {
     const { stdout } = await mustRun("git config user.email", "git", ["config", "user.email"], { cwd: worktree })
     if (!stdout.trim()) throw new Error("empty")
   } catch {
-    args.push("-c", "user.name=sdlc-conductor", "-c", "user.email=sdlc@conductor.local")
+    args.push("-c", "user.name=sdlc-whipper", "-c", "user.email=whipper@localhost")
   }
   return args
 }

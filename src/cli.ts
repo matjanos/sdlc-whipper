@@ -32,7 +32,13 @@ async function main(): Promise<void> {
     console.log(renderHelp(ui))
     return
   }
-  const aliases: Record<string, string> = { hit: "tick", run: "tick", cockpit: "serve", costs: "ledger" }
+  const aliases: Record<string, string> = {
+    hit: "tick",
+    run: "tick",
+    crack: "deliver",
+    cockpit: "serve",
+    costs: "ledger",
+  }
   const command = aliases[args.command] ?? args.command
   loadDotEnv()
   const debug = flagBool(args.flags, "debug")

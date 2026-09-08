@@ -13,7 +13,14 @@ export function parseArgs(argv: string[]): ParsedArgs {
   while (i < argv.length) {
     const arg = argv[i]!
     if (arg.startsWith("--")) {
-      const name = arg.slice(2)
+      const body = arg.slice(2)
+      const equals = body.indexOf("=")
+      if (equals > 0) {
+        flags.set(body.slice(0, equals), body.slice(equals + 1))
+        i += 1
+        continue
+      }
+      const name = body
       const next = argv[i + 1]
       if (next !== undefined && !next.startsWith("--")) {
         flags.set(name, next)

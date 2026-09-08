@@ -21,7 +21,8 @@ describe("friendly CLI skin", () => {
   it("makes hit the primary dispatch command and documents compatibility", () => {
     const help = renderHelp()
     expect(help).toContain("whipper hit --dry-run")
-    expect(help).toContain("run` / `tick` / `serve`")
+    expect(help).toContain("whipper crack LIN-123")
+    expect(help).toContain("deliver` / `run` / `tick` / `serve`")
     expect(help).toContain("focused harness")
     expect(help).toContain("Merging always stays human")
   })

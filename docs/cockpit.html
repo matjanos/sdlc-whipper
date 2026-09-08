@@ -191,7 +191,7 @@
   </div>
 
   <footer>
-    <span>sdLC conductor · cockpit is a view — the CLI remains first-class</span>
+    <span>sdLC Whipper · cockpit is a view — the CLI remains first-class</span>
     <span id="footSrc">source: /api/state</span>
   </footer>
 </div>
@@ -217,7 +217,7 @@ async function poll(){
   try{
     const r = await fetch("/api/state");
     if(r.ok) render(await r.json());
-  }catch{ /* conductor down */ }
+  }catch{ /* Whipper down */ }
 }
 if(typeof EventSource !== "undefined"){
   const es = new EventSource("/api/events");
@@ -265,7 +265,7 @@ function renderGraph(s){
   const svg = $("graph");
   const tickets = s.tickets;
   if(tickets.length === 0){ svg.setAttribute("viewBox","0 0 600 120"); svg.innerHTML =
-    `<text x="300" y="64" text-anchor="middle" fill="var(--faint)" font-size="10" letter-spacing="3" font-family="var(--mono)">NO TICKETS — WAITING FOR CONDUCTOR</text>`; return; }
+    `<text x="300" y="64" text-anchor="middle" fill="var(--faint)" font-size="10" letter-spacing="3" font-family="var(--mono)">NO TICKETS — WAITING FOR WHIPPER</text>`; return; }
   // depth: 0 = no unresolved blockers
   const byKey = new Map(tickets.map(t => [t.key, t]));
   const depthOf = new Map();

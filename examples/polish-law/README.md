@@ -3,7 +3,7 @@
 Request: [request.md](request.md). Backlog: [tickets.json](tickets.json).
 Target: `~/code/test-sdlc-app`, an initialized Git repository with a runnable Node placeholder and `.sdlc/config.json` using all fake adapters.
 
-Run from `~/code/sdlc-conductor`:
+Run from your `sdlc-whipper` checkout:
 
 ```sh
 export SDL_FAKE_TICKETS="$PWD/examples/polish-law/tickets.json"

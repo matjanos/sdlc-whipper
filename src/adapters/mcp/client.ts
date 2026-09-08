@@ -31,7 +31,7 @@ export class McpToolbox {
     if (this.client) return
     const headers: Record<string, string> = { ...this.endpoint.headers }
     if (this.endpoint.token) headers["Authorization"] = `Bearer ${this.endpoint.token}`
-    const client = new Client({ name: "sdlc-conductor", version: "0.1.0" })
+    const client = new Client({ name: "sdlc-whipper", version: "0.1.0" })
     const transport =
       this.endpoint.transport ??
       new StreamableHTTPClientTransport(new URL(this.endpoint.url), {

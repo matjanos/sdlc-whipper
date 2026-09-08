@@ -37,12 +37,12 @@ export function renderHelp(options: UiOptions = {}): string {
     "",
     bold("MOVE THE TEAM", color),
     `  ${green("hit", color)}                    Scan the backlog and dispatch ready tickets`,
-    `  ${green("deliver", color)} ${dim("<KEY>", color)}          Send one ticket through the delivery route`,
+    `  ${green("crack", color)} ${dim("<KEY>", color)}            Send one durable ticket through the route`,
     "",
     bold("FIRST RIDE", color),
     `  ${dim("$", color)} whipper status`,
     `  ${dim("$", color)} whipper hit --dry-run`,
-    `  ${dim("$", color)} whipper deliver LIN-123`,
+    `  ${dim("$", color)} whipper crack LIN-123`,
     "",
     bold("COMMON OPTIONS", color),
     "  --config <path>         Use a specific .sdlc/config.json",
@@ -54,7 +54,7 @@ export function renderHelp(options: UiOptions = {}): string {
     "  -h, --help              Show this guide",
     "  -v, --version           Show the version",
     "",
-    dim("Compatibility: `sdlc` binary and `run` / `tick` / `serve` commands remain supported.", color),
+    dim("Compatibility: `sdlc` and `deliver` / `run` / `tick` / `serve` remain supported.", color),
   ].join("\n")
 }
 

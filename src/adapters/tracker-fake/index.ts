@@ -113,7 +113,7 @@ export class FakeTracker implements TicketTracker {
     }
     t.comments.push({
       id: `c${this.commentSeq++}`,
-      author: "sdlc-conductor",
+      author: "sdlc-whipper",
       body,
       createdAt: new Date().toISOString(),
     })

@@ -1,4 +1,4 @@
-# AGENTS.md — developing sdlc-conductor
+# AGENTS.md — developing sdlc-whipper
 
 ## What this repo is
 
