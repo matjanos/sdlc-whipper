@@ -25,7 +25,7 @@ Humans stay in the loop where it matters: unclear tickets get questions on the t
 
 ```sh
 pnpm install
-pnpm test            # 29 tests: tick flow, firewall, loops, budget, adapters
+pnpm test            # 70 offline tests: tick flow, firewall, loops, budget, adapters, runtime shapes
 ```
 
 ### Offline demo (no keys, no network)
@@ -90,7 +90,7 @@ split → research → [council if confidence=low] → execute ⇄ review (≤3 
 
 Every model call is recorded with run/ticket/phase/agent tags. Before each prompt the conductor asserts the per-task budget (`perTaskUsd` / `perTaskTokens`) and kills sessions (`interruptAll`) + escalates when exceeded. `sdlc ledger` answers "what did delivering LIN-123 cost?".
 
-Cost attribution needs model pricing: token counts are recorded now; `costUsd` fills in once the SDK event shape is verified (see roadmap).
+Cost attribution: usage events carry the server-computed `cost`; offline rollups stay token-based, and `SDL_LIVE_SMOKE=1 pnpm test -- test/runtime-live.spec.ts` re-verifies the event→ledger feed against the real server in seconds.
 
 ## Extending
 
