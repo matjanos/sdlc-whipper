@@ -9,6 +9,7 @@ import { VerdictParseError } from "../phases/shared.js"
 import { resolveModel } from "../config.js"
 import { createSpinner, formatElapsed } from "../util/progress.js"
 import { formatTokens } from "../util/format.js"
+import { isShuttingDown } from "../util/shutdown.js"
 
 /**
  * Pipelines are data. Reorder, disable, or insert steps here without touching
@@ -191,6 +192,12 @@ async function handlePhaseError(
   err: unknown,
   phase: PhaseName,
 ): Promise<RunStatus> {
+  if (isShuttingDown()) {
+    // user-initiated stop: sessions were interrupted, lock released — do not
+    // post escalations or retry against a world the user asked to stop.
+    deps.log.warn(`${phase}: interrupted by user — stopping without escalation`)
+    return "failed"
+  }
   if (err instanceof EscalationError) {
     await escalate(deps, task.ticket.key, err.tag, err.body)
     deps.log.warn(`${phase}: escalated [${err.tag}]`)

@@ -7,6 +7,8 @@ import { createDeps, type RuntimeMode } from "./adapters/index.js"
 import { buildStatus } from "./conductor/status.js"
 import { deliverTask, runTick } from "./conductor/tick.js"
 import { setProgressDisabled } from "./util/progress.js"
+import { installShutdownHandlers, isShuttingDown } from "./util/shutdown.js"
+import { releaseTickLock } from "./util/lock.js"
 import type { AgentRole } from "./types.js"
 import {
   renderDeliveryResult,
@@ -95,16 +97,28 @@ async function main(): Promise<void> {
         if (flagBool(args.flags, "no-groom")) {
           deps.config.raw.phases["groom"] = { enabled: false }
         }
+        installShutdownHandlers({
+          onInterrupt: () => {
+            void deps.runtime.interruptAll()
+            releaseTickLock(config.sdlcDir)
+          },
+        })
         console.log(renderRunStart(config.repoRoot, deps.dryRun, ui))
         const report = await runTick(deps)
         const rollup = await deps.ledger.rollup("ticket")
         console.log(renderRunSummary(report.candidates, rollup, ui))
+        if (isShuttingDown()) log.warn("run stopped by user — in-progress work stays in the worktree; safe to re-run")
         break
       }
       case "deliver": {
         const key = args.positional[0]
         if (!key) throw new Error("hit: ticket key required, e.g. `whipper hit LIN-123`")
         const deps = createDeps(config, log, { runtime: runtimeFlag, dryRun })
+        installShutdownHandlers({
+          onInterrupt: () => {
+            void deps.runtime.interruptAll()
+          },
+        })
         await deps.tracker.discoverWorkspace()
         const ticket = await deps.tracker.getTicket(key)
         console.log(renderDeliveryStart(ticket.key, ticket.title, deps.dryRun, ui))

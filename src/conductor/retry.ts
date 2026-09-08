@@ -1,4 +1,5 @@
 import type { Logger } from "../util/log.js"
+import { isShuttingDown } from "../util/shutdown.js"
 
 /**
  * Transient-error classification + bounded retry for LLM calls. Network-level
@@ -39,6 +40,7 @@ export async function withTransientRetry<T>(fn: () => Promise<T>, opts: RetryOpt
       return await fn()
     } catch (err) {
       lastError = err
+      if (isShuttingDown()) throw err // user interrupt: never retry against a stopping world
       if (attempt === opts.retries || !isTransient(err)) throw err
       const waitMs = opts.baseDelayMs * 2 ** attempt
       opts.log?.warn(

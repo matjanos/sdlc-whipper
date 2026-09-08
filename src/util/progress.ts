@@ -21,6 +21,14 @@ export function setProgressDisabled(value: boolean): void {
   disabled = value
 }
 
+/** Live spinners — the shutdown coordinator freezes them for a clean last frame. */
+const active = new Set<{ clear(): void }>()
+
+export function stopActiveSpinners(): void {
+  for (const spinner of active) spinner.clear()
+  active.clear()
+}
+
 function defaultEnabled(): boolean {
   return !disabled && Boolean(process.stdout.isTTY) && process.env["NO_COLOR"] === undefined
 }
@@ -38,11 +46,19 @@ export function createSpinner(opts: { enabled?: boolean; stream?: { write(text: 
     stream.write(`\r\u001B[2K${FRAMES[frame % FRAMES.length]} ${text} · ${elapsed}`)
   }
 
+  const clear = (): void => {
+    if (!enabled) return
+    stream.write(`\r\u001B[2K`)
+  }
+
+  const handle = { clear }
+
   const api: Spinner = {
     start(initial: string): void {
       text = initial
       startedAt = Date.now()
       if (!enabled) return
+      active.add(handle)
       render()
       timer = setInterval(() => {
         frame += 1
@@ -60,8 +76,9 @@ export function createSpinner(opts: { enabled?: boolean; stream?: { write(text: 
         clearInterval(timer)
         timer = undefined
       }
+      active.delete(handle)
       if (!enabled) return
-      stream.write(`\r\u001B[2K`)
+      clear()
       if (note) stream.write(`${note}\n`)
     },
   }
