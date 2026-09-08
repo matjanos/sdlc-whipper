@@ -1,3 +1,5 @@
+import { clearActiveSpinnerLine, redrawActiveSpinnerLine } from "./progress.js"
+
 export type LogLevel = "debug" | "info" | "warn" | "error"
 
 const order: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 }
@@ -23,9 +25,13 @@ export function createLogger(level: LogLevel = "info", options: LoggerOptions = 
     const line = options.pretty
       ? `  ${glyph[lvl]}${prefix ? ` ${prefix.padEnd(12)}` : ""} ${msg}`
       : `${new Date().toISOString()} [${lvl.toUpperCase()}]${tag} ${msg}`
+    // share the cursor with the live spinner: clear its partial line, log,
+    // then let the spinner redraw below the fresh log line
+    clearActiveSpinnerLine()
     if (lvl === "error") console.error(line, ...args)
     else if (lvl === "warn") console.warn(line, ...args)
     else console.log(line, ...args)
+    redrawActiveSpinnerLine()
   }
   const make = (prefix: string): Logger => ({
     debug: (m, ...a) => write("debug", prefix, m, a),

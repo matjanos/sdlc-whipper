@@ -70,11 +70,12 @@ async function runLLMPhase(
   const startedAt = Date.now()
   const role = phase.role
   const model = resolveModel(deps.config, role)?.split("/").pop()
-  spinner.start(`${phase.name} · ${role}${model ? ` · ${model}` : ""} — working`)
+  const label = `${role.startsWith(phase.name) ? phase.name : `${phase.name} · ${role}`}${model ? ` · ${model}` : ""}`
+  spinner.start(`${label} — working`)
   deps.runtime.activityFeed?.((info) => {
     if (info.role !== role) return
     const tokens = info.tokens ? ` · ${formatTokens(info.tokens)} tok` : ""
-    spinner.update(`${phase.name} · ${role}${model ? ` · ${model}` : ""} — ${info.text}${tokens}`)
+    spinner.update(`${label} — ${info.text}${tokens}`)
   })
 
   const prompt = (text: Parameters<typeof deps.runtime.prompt>[1]) =>
@@ -103,6 +104,7 @@ async function runLLMPhase(
       result = await parse()
     }
     outcomes[phase.name] = result
+    spinner.stop() // free the line before the phase log lands on it
     deps.log.info(
       `${phase.name}: ok${opts.fresh ? " (fresh)" : ""}${retried ? " (verdict retried)" : ""} (${formatElapsed(Date.now() - startedAt)})`,
     )

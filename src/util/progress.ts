@@ -27,6 +27,23 @@ const active = new Set<{ clear(): void }>()
 export function stopActiveSpinners(): void {
   for (const spinner of active) spinner.clear()
   active.clear()
+  rendering = undefined
+}
+
+/**
+ * The currently rendering spinner line, if any. Loggers call
+ * `clearActiveSpinnerLine()` before writing a line and
+ * `redrawActiveSpinnerLine()` after, so live UI and logs share one cursor
+ * without clobbering each other.
+ */
+let rendering: { clear(): void; render(): void } | undefined
+
+export function clearActiveSpinnerLine(): void {
+  rendering?.clear()
+}
+
+export function redrawActiveSpinnerLine(): void {
+  rendering?.render()
 }
 
 function defaultEnabled(): boolean {
@@ -51,6 +68,15 @@ export function createSpinner(opts: { enabled?: boolean; stream?: { write(text: 
     stream.write(`\r\u001B[2K`)
   }
 
+  // While rendering, route logger writes around this line (see log.ts).
+  const renderer = {
+    clear,
+    render: () => {
+      if (!enabled || !timer) return
+      render()
+    },
+  }
+
   const handle = { clear }
 
   const api: Spinner = {
@@ -59,6 +85,7 @@ export function createSpinner(opts: { enabled?: boolean; stream?: { write(text: 
       startedAt = Date.now()
       if (!enabled) return
       active.add(handle)
+      rendering = renderer
       render()
       timer = setInterval(() => {
         frame += 1
@@ -77,6 +104,7 @@ export function createSpinner(opts: { enabled?: boolean; stream?: { write(text: 
         timer = undefined
       }
       active.delete(handle)
+      if (rendering === renderer) rendering = undefined
       if (!enabled) return
       clear()
       if (note) stream.write(`${note}\n`)

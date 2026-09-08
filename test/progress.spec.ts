@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { createSpinner, formatElapsed } from "../src/util/progress.js"
+import { createSpinner, formatElapsed, clearActiveSpinnerLine, redrawActiveSpinnerLine } from "../src/util/progress.js"
 
 function fakeStream() {
   return { write: vi.fn(), written: () => stream.write.mock.calls.map((c) => String(c[0])).join("") }
@@ -35,6 +35,21 @@ describe("spinner (terminal loader)", () => {
     s.start("research · researcher")
     s.stop("✓ research 0:31")
     expect(stream.written().endsWith("✓ research 0:31\n")).toBe(true)
+  })
+
+  it("lets a logger share the cursor: clear before its line, redraw after", () => {
+    vi.useFakeTimers()
+    const s = createSpinner({ enabled: true, stream })
+    s.start("execute · glm-5.3-flash — working")
+    vi.advanceTimersByTime(90)
+    clearActiveSpinnerLine()
+    stream.write("  │ execute: ok (0:37)\n")
+    redrawActiveSpinnerLine()
+    const out = stream.written()
+    // the log line must start at column 0, never glued to a spinner frame
+    expect(out).toContain("\r\u001B[2K  │ execute: ok (0:37)\n")
+    vi.useRealTimers()
+    s.stop()
   })
 })
 
