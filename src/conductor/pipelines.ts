@@ -7,7 +7,7 @@ import { withTransientRetry } from "./retry.js"
 import { BudgetExceededError, EscalationError, ModelCallFailedError, type RunStatus } from "../types.js"
 import { VerdictParseError } from "../phases/shared.js"
 import { resolveModel } from "../config.js"
-import { createSpinner, formatElapsed } from "../util/progress.js"
+import { createSpinner, formatElapsed, renderTrail } from "../util/progress.js"
 import { formatTokens } from "../util/format.js"
 import { isShuttingDown } from "../util/shutdown.js"
 
@@ -148,6 +148,16 @@ export async function runDeliveryPipeline(
       continue
     }
     phaseReached = step.phase
+    // quiet wayfinding: the route so far, where we are, what is ahead
+    const route = DELIVERY_PIPELINE.filter((s) => phaseEnabled(deps, s.phase))
+      .filter((s) => !s.when || s.when(outcomes))
+      .map((s) => s.phase)
+    const at = route.indexOf(step.phase)
+    if (at >= 0) {
+      deps.log.info(
+        renderTrail(route.map((name, i) => ({ name, state: i < at ? "done" : i === at ? "current" : "todo" }))),
+      )
+    }
 
     try {
       if (step.loopWith) {

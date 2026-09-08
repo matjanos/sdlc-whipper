@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
-import { createSpinner, formatElapsed, clearActiveSpinnerLine, redrawActiveSpinnerLine } from "../src/util/progress.js"
+import {
+  createSpinner,
+  formatElapsed,
+  clearActiveSpinnerLine,
+  redrawActiveSpinnerLine,
+  renderTrail,
+} from "../src/util/progress.js"
+import { stamp, formatClock } from "../src/util/format.js"
 
 function fakeStream() {
   return { write: vi.fn(), written: () => stream.write.mock.calls.map((c) => String(c[0])).join("") }
@@ -58,5 +65,27 @@ describe("formatElapsed", () => {
     expect(formatElapsed(0)).toBe("0:00")
     expect(formatElapsed(31_000)).toBe("0:31")
     expect(formatElapsed(69_000)).toBe("1:09")
+  })
+})
+
+describe("trail and wall-clock stamps", () => {
+  it("renders the route: done ✓, current ◉, ahead ○", () => {
+    const line = renderTrail([
+      { name: "split", state: "done" },
+      { name: "execute", state: "current" },
+      { name: "review", state: "todo" },
+    ])
+    expect(line).toBe("✓ split ─ ◉ execute ─ ○ review")
+  })
+
+  it("pads muted timestamps to the right edge without ANSI when color is off", () => {
+    const line = stamp("🐎 WHIPPER", {}, new Date("2026-09-08T21:37:25"))
+    expect(line).toContain("🐎 WHIPPER")
+    expect(line).toContain("21:37:25")
+    expect(line).not.toContain("\u001B[")
+  })
+
+  it("formatClock renders HH:MM:SS", () => {
+    expect(formatClock(new Date("2026-09-08T21:37:25"))).toBe("21:37:25")
   })
 })

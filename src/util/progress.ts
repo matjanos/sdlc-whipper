@@ -21,6 +21,11 @@ export function setProgressDisabled(value: boolean): void {
   disabled = value
 }
 
+/** Shared TTY/NO_COLOR gate for ANSI accents (logger stamps, trail, spinner). */
+export function colorEnabled(): boolean {
+  return !disabled && Boolean(process.stdout.isTTY) && process.env["NO_COLOR"] === undefined
+}
+
 /** Live spinners — the shutdown coordinator freezes them for a clean last frame. */
 const active = new Set<{ clear(): void }>()
 
@@ -47,7 +52,25 @@ export function redrawActiveSpinnerLine(): void {
 }
 
 function defaultEnabled(): boolean {
-  return !disabled && Boolean(process.stdout.isTTY) && process.env["NO_COLOR"] === undefined
+  return colorEnabled()
+}
+
+export interface TrailStep {
+  name: string
+  state: "done" | "current" | "todo"
+}
+
+/** The delivery route as a quiet track: ✓ done ─ ◉ just finished ─ ○ ahead. */
+export function renderTrail(steps: TrailStep[]): string {
+  const c = colorEnabled()
+  const paint = (code: number, text: string): string => (c ? `\u001B[${code}m${text}\u001B[0m` : text)
+  return steps
+    .map((step) => {
+      if (step.state === "done") return paint(32, `✓ ${step.name}`)
+      if (step.state === "current") return paint(1, paint(36, `◉ ${step.name}`))
+      return paint(90, `○ ${step.name}`)
+    })
+    .join(paint(90, " ─ "))
 }
 
 export function createSpinner(opts: { enabled?: boolean; stream?: { write(text: string): void } } = {}): Spinner {

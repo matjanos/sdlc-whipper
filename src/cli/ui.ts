@@ -1,5 +1,6 @@
 import type { StatusReport } from "../conductor/status.js"
 import type { RunStatus } from "../types.js"
+import { formatTokens, stamp } from "../util/format.js"
 
 export interface UiOptions {
   color?: boolean
@@ -15,6 +16,7 @@ const yellow = (text: string, color: boolean): string => esc(33, text, color)
 const red = (text: string, color: boolean): string => esc(31, text, color)
 const cyan = (text: string, color: boolean): string => esc(36, text, color)
 const magenta = (text: string, color: boolean): string => esc(35, text, color)
+const faint = (text: string, color: boolean): string => esc(90, text, color)
 
 const BRAND = (color: boolean): string => `${magenta("🐎", color)} ${bold("WHIPPER", color)}  ${cyan("♞", color)}`
 
@@ -111,12 +113,14 @@ export function renderStatus(report: StatusReport, options: UiOptions = {}): str
       color,
     ),
   )
+  lines[0] = stamp(lines[0] ?? "", options)
   return lines.join("\n")
 }
 
 export function renderRunStart(repoRoot: string, dryRun: boolean, options: UiOptions = {}): string {
   const color = options.color ?? false
-  return `${BRAND(color)}  ${dryRun ? yellow("🎬 dry run", color) : green("🚀 team moving", color)}\n${dim(repoRoot, color)}\n${rule(color)}`
+  const head = `${BRAND(color)}  ${dryRun ? yellow("🎬 dry run", color) : green("🚀 team moving", color)}`
+  return `${stamp(head, options)}\n${dim(repoRoot, options.color ?? false)}\n${rule(color)}`
 }
 
 export function renderRunSummary(
@@ -142,17 +146,19 @@ export function renderRunSummary(
       lines.push(dim("  💳 these models report $0 to the server (subscription plan) — tokens are the real meter", color))
     }
   }
+  lines[1] = stamp(lines[1] ?? "", options)
   return lines.join("\n")
 }
 
 export function renderDeliveryStart(keyName: string, title: string, dryRun: boolean, options: UiOptions = {}): string {
   const color = options.color ?? false
-  return [
+  const lines = [
     `${BRAND(color)}  ${dryRun ? yellow("🎬 practice harness", color) : green("🎯 ticket harnessed", color)}`,
     rule(color),
     `📦 ${key(keyName, color)}  ${title}`,
     dim("  📋 split → 🔍 research → ⚙️  execute ⇄ 🔍 review → 🚀 publish → 🌍 preview → 🧪 test", color),
-  ].join("\n")
+  ]
+  return stamp(lines.join("\n"), options)
 }
 
 export function renderDeliveryResult(
@@ -257,18 +263,13 @@ export function renderLedger(
   if (total.cost === 0 && total.tokens > 0) {
     lines.push(dim("💳 these models report no metered cost (subscription plan) — treat tokens as the spend", color))
   }
+  lines[0] = stamp(lines[0] ?? "", options)
   return lines.join("\n")
 }
 
 export function renderError(message: string, options: UiOptions = {}): string {
   const color = options.color ?? false
   return `${red("🛑 STOPPED SAFELY", color)}\n${message}\n${dim("No merge was performed. Re-run with --debug for detail.", color)}`
-}
-
-export function formatTokens(tokens: number): string {
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}m`
-  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1)}k`
-  return String(tokens)
 }
 
 function rule(color: boolean): string {
