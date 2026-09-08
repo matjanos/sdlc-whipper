@@ -1,5 +1,5 @@
 import { clearActiveSpinnerLine, redrawActiveSpinnerLine, colorEnabled } from "./progress.js"
-import { stamp } from "./format.js"
+import { formatClock, stamp } from "./format.js"
 
 export type LogLevel = "debug" | "info" | "warn" | "error"
 
@@ -34,8 +34,6 @@ const mark = (lvl: LogLevel, colored: boolean): string => {
 const faint = (text: string, colored: boolean): string =>
   colored ? `\u001B[90m${text}\u001B[0m` : text
 
-const iso = (): string => new Date().toISOString()
-
 export function createLogger(level: LogLevel = "info", options: LoggerOptions = {}): Logger {
   const write = (lvl: LogLevel, prefix: string, msg: string, args: unknown[]) => {
     if (order[lvl] < order[level]) return
@@ -46,8 +44,10 @@ export function createLogger(level: LogLevel = "info", options: LoggerOptions = 
       // muted wall-clock stamp pinned to the right edge — quiet, always there
       line = stamp(line, { color: colored })
     } else {
-      // debug/machine mode: full ISO stays greppable, but visually quiet
-      line = `${faint(`${iso()} ${lvl.toUpperCase().padEnd(5)}`, colored)} ${msg}`
+      // debug/machine mode: compact local time with ms — date lives in the ledger
+      const now = new Date()
+      const ms = String(now.getMilliseconds()).padStart(3, "0")
+      line = `${faint(`${formatClock(now)}.${ms} ${lvl.toUpperCase()}`, colored)} ${msg}`
     }
     // share the cursor with the live spinner: clear its partial line, log,
     // then let the spinner redraw below the fresh log line

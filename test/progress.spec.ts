@@ -91,24 +91,13 @@ describe("trail and wall-clock stamps", () => {
     expect(line).toBe("✓ split ─ ◉ execute ─ ○ review")
   })
 
-  it("pads muted timestamps to the right edge without ANSI when color is off", () => {
+  it("stamps are concise and inline: content, two spaces, HH:MM", () => {
     const line = stamp("🐎 WHIPPER", {}, new Date("2026-09-08T21:37:25"))
-    expect(line).toContain("🐎 WHIPPER")
-    expect(line).toContain("21:37:25")
+    expect(line).toBe("🐎 WHIPPER  21:37")
     expect(line).not.toContain("\u001B[")
   })
 
   it("formatClock renders HH:MM:SS", () => {
     expect(formatClock(new Date("2026-09-08T21:37:25"))).toBe("21:37:25")
-  })
-
-  it("caps the stamp gap on ultrawide terminals", () => {
-    const original = process.stdout.columns
-    Object.defineProperty(process.stdout, "columns", { value: 300, configurable: true })
-    const line = stamp("🐎 WHIPPER", {}, new Date("2026-09-08T21:37:25"))
-    expect(line.length).toBeLessThan(130) // no 250-space void
-    expect(line).toContain("21:37:25")
-    if (original === undefined) delete (process.stdout as { columns?: number }).columns
-    else Object.defineProperty(process.stdout, "columns", { value: original, configurable: true })
   })
 })
