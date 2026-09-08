@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest"
-import { renderDeliveryResult, renderHelp, renderLedger, renderRunSummary, renderStatus } from "../src/cli/ui.js"
+import {
+  renderDeliveryResult,
+  renderHarnesses,
+  renderHelp,
+  renderHitch,
+  renderLedger,
+  renderRunSummary,
+  renderStatus,
+} from "../src/cli/ui.js"
 import type { StatusReport } from "../src/conductor/status.js"
 
 const report: StatusReport = {
@@ -20,8 +28,8 @@ const report: StatusReport = {
 describe("friendly CLI skin", () => {
   it("makes hit the primary dispatch command and documents compatibility", () => {
     const help = renderHelp()
-    expect(help).toContain("whipper hit --dry-run")
-    expect(help).toContain("whipper crack LIN-123")
+    expect(help).toContain("whipper crack --dry-run")
+    expect(help).toContain("whipper hit LIN-123")
     expect(help).toContain("deliver` / `run` / `tick` / `serve`")
     expect(help).toContain("focused harness")
     expect(help).toContain("Merging always stays human")
@@ -32,7 +40,7 @@ describe("friendly CLI skin", () => {
     expect(text).toContain("●  1  ready at the gate")
     expect(text).toContain("■  1  held by dependencies")
     expect(text).toContain("waiting for ENG-12 (backlog)")
-    expect(text).toContain("whipper hit")
+    expect(text).toContain("whipper crack")
     expect(text).not.toContain("\u001B[")
   })
 
@@ -58,5 +66,23 @@ describe("friendly CLI skin", () => {
 
   it("does not claim a dry run reached the real human gate", () => {
     expect(renderDeliveryResult("ENG-12", "delivered", {}, true)).toContain("practice route complete")
+    expect(renderDeliveryResult("ENG-12", "failed", {}, true)).toContain("×")
+  })
+
+  it("explains configured harnesses and project hitching", () => {
+    const harnesses = renderHarnesses([{ role: "executor", modelClass: "workhorse", model: "openai/model", steps: 40 }])
+    expect(harnesses).toContain("restrained specialists")
+    expect(harnesses).toContain("workhorse")
+    expect(harnesses).toContain("≤40 steps")
+
+    const hitch = renderHitch({
+      project: "shop",
+      configPath: "/shop/.sdlc/config.json",
+      team: "ENG",
+      harnesses: 7,
+      adapters: { tracker: "linear", codehost: "github", preview: "vercel", runtime: "opencode" },
+    })
+    expect(hitch).toContain("project team connected")
+    expect(hitch).toContain("whipper status")
   })
 })

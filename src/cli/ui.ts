@@ -32,17 +32,19 @@ export function renderHelp(options: UiOptions = {}): string {
     "",
     bold("SEE THE TEAM", color),
     `  ${cyan("status", color)}                 Ready, blocked, waiting, and in-flight work`,
+    `  ${cyan("harness", color)}                Inspect each agent's role, model, and step limit`,
+    `  ${cyan("hitch", color)}                  Verify the team is connected to this project`,
     `  ${cyan("cockpit", color)}               Open the live project cockpit`,
     `  ${cyan("ledger", color)}                Cost and token usage by ticket, phase, run, or agent`,
     "",
     bold("MOVE THE TEAM", color),
-    `  ${green("hit", color)}                    Scan the backlog and dispatch ready tickets`,
-    `  ${green("crack", color)} ${dim("<KEY>", color)}            Send one durable ticket through the route`,
+    `  ${green("crack", color)}                  Crack the whip: reconcile and dispatch the team`,
+    `  ${green("hit", color)} ${dim("<KEY>", color)}              Target one durable ticket directly`,
     "",
     bold("FIRST RIDE", color),
     `  ${dim("$", color)} whipper status`,
-    `  ${dim("$", color)} whipper hit --dry-run`,
-    `  ${dim("$", color)} whipper crack LIN-123`,
+    `  ${dim("$", color)} whipper crack --dry-run`,
+    `  ${dim("$", color)} whipper hit LIN-123`,
     "",
     bold("COMMON OPTIONS", color),
     "  --config <path>         Use a specific .sdlc/config.json",
@@ -96,7 +98,7 @@ export function renderStatus(report: StatusReport, options: UiOptions = {}): str
 
   lines.push(bold("NEXT MOVE", color))
   if (report.wouldDeliverNow > 0) {
-    lines.push(`  ${green("whipper hit", color)}  ${dim(`will dispatch ${report.wouldDeliverNow} ticket${report.wouldDeliverNow === 1 ? "" : "s"}`, color)}`)
+    lines.push(`  ${green("whipper crack", color)}  ${dim(`will dispatch ${report.wouldDeliverNow} ticket${report.wouldDeliverNow === 1 ? "" : "s"}`, color)}`)
   } else if (report.waitingForHuman.length > 0) {
     lines.push(`  ${yellow("Open the tracker", color)}  ${dim("an agent is waiting for human context", color)}`)
   } else {
@@ -168,7 +170,60 @@ export function renderDeliveryResult(
     failed: "stopped safely",
   }
   const message = dryRun && status === "delivered" ? friendly["dry-run"] : friendly[status]
-  return `\n${statusIcon(dryRun ? "dry-run" : status, color)} ${key(ticket, color)}  ${message}`
+  const displayedStatus = dryRun && status === "delivered" ? "dry-run" : status
+  return `\n${statusIcon(displayedStatus, color)} ${key(ticket, color)}  ${message}`
+}
+
+export interface HarnessRow {
+  role: string
+  modelClass?: string
+  model?: string
+  steps?: number
+}
+
+export function renderHarnesses(rows: HarnessRow[], options: UiOptions = {}): string {
+  const color = options.color ?? false
+  const lines = [
+    `${bold("HARNESSES", color)}  ${cyan("♞", color)}  ${dim(`${rows.length} restrained specialists`, color)}`,
+    rule(color),
+    `${dim("ROLE".padEnd(14), color)} ${dim("CLASS".padEnd(12), color)} ${dim("MODEL", color)}`,
+  ]
+  for (const row of rows) {
+    const role = row.role.padEnd(14)
+    const modelClass = (row.modelClass ?? "default").padEnd(12)
+    const model = row.model ?? "runtime default"
+    const steps = row.steps ? ` · ≤${row.steps} steps` : ""
+    lines.push(`${bold(role, color)} ${yellow(modelClass, color)} ${model}${dim(steps, color)}`)
+  }
+  lines.push("", dim("A harness is role + model + tools + context limits. Agents never set their own bounds.", color))
+  return lines.join("\n")
+}
+
+export interface HitchReport {
+  project: string
+  configPath: string
+  team: string
+  harnesses: number
+  adapters: { tracker: string; codehost: string; preview: string; runtime: string }
+}
+
+export function renderHitch(report: HitchReport, options: UiOptions = {}): string {
+  const color = options.color ?? false
+  return [
+    `${bold("HITCHED", color)}  ${green("● project team connected", color)}`,
+    rule(color),
+    `${bold("project", color).padEnd(color ? 22 : 14)} ${report.project}`,
+    `${bold("team", color).padEnd(color ? 22 : 14)} ${report.team}`,
+    `${bold("harnesses", color).padEnd(color ? 22 : 14)} ${report.harnesses}`,
+    `${bold("tracker", color).padEnd(color ? 22 : 14)} ${report.adapters.tracker}`,
+    `${bold("code host", color).padEnd(color ? 22 : 14)} ${report.adapters.codehost}`,
+    `${bold("preview", color).padEnd(color ? 22 : 14)} ${report.adapters.preview}`,
+    `${bold("runtime", color).padEnd(color ? 22 : 14)} ${report.adapters.runtime}`,
+    "",
+    dim(report.configPath, color),
+    "",
+    `${green("next", color)}  whipper status`,
+  ].join("\n")
 }
 
 export function renderLedger(

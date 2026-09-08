@@ -93,6 +93,6 @@ export function formatStatus(r: StatusReport): string {
     for (const t of r.blocked) lines.push(`  ■ ${t.key.padEnd(9)} ${t.title}\n      waiting for ${t.blocker}`)
   }
   lines.push("", "NEXT MOVE")
-  lines.push(r.wouldDeliverNow > 0 ? `  whipper hit  will dispatch ${r.wouldDeliverNow}` : "  Nothing to dispatch right now.")
+  lines.push(r.wouldDeliverNow > 0 ? `  whipper crack  will dispatch ${r.wouldDeliverNow}` : "  Nothing to dispatch right now.")
   return lines.join("\n")
 }

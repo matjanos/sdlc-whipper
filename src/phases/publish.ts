@@ -14,13 +14,38 @@ export const publishPhase = definePhase<PublishResult>({
   usesLLM: false,
   run: async (task) => {
     const base = task.deps.config.raw.repo.baseBranch
-    if (!task.worktree || (!(await hasCommits(task.worktree, base)) && !(await hasUncommittedChanges(task.worktree)))) {
+    if (!task.worktree) {
+      task.deps.log.info("publish: no commits in worktree — skipping PR (stub run)")
+      return { skipped: true }
+    }
+    const dirty = await hasUncommittedChanges(task.worktree)
+    if (!(await hasCommits(task.worktree, base)) && !dirty) {
       task.deps.log.info("publish: no commits in worktree — skipping PR (stub run)")
       return { skipped: true }
     }
     const review = task.artifacts.getJSON<ReviewResult>("reviews/r1.json")
     const branch = branchName(task.deps.config, task.ticket.key)
-    if (await hasUncommittedChanges(task.worktree)) {
+    const prInput = {
+      title: `${task.ticket.key}: ${task.ticket.title}`,
+      body: [
+        `Delivered autonomously for ${task.ticket.key}: ${task.ticket.title}`,
+        task.ticket.url ? `\nTicket: ${task.ticket.url}` : "",
+        review ? `\n**Reviewer verdict:** ${review.verdict} (${review.findings.length} findings resolved)` : "",
+        `\n**Preview:** https://pr-<N>-${task.deps.config.raw.preview.project}.vercel.app (once deployed)`,
+        `\n**Cost:** see \`whipper ledger --ticket ${task.ticket.key}\``,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      head: branch,
+      base,
+    }
+    if (task.deps.dryRun) {
+      if (dirty) task.deps.log.info(`[dry-run] would commit worktree changes for ${task.ticket.key}`)
+      task.deps.log.info(`[dry-run] would push ${branch}`)
+      await openPR(task.deps, prInput)
+      return { skipped: true }
+    }
+    if (dirty) {
       await commitAll(task.worktree, `sdlc: ${task.ticket.key} — ${task.ticket.title}`)
     }
     await push(task.worktree, branch)
@@ -29,20 +54,7 @@ export const publishPhase = definePhase<PublishResult>({
       task.deps.log.info(`publish: reusing existing PR #${existing.number}`)
       return { skipped: false, pr: { number: existing.number, url: existing.url } }
     }
-    const pr = await openPR(task.deps, {
-      title: `${task.ticket.key}: ${task.ticket.title}`,
-      body: [
-        `Delivered autonomously for ${task.ticket.key}: ${task.ticket.title}`,
-        task.ticket.url ? `\nTicket: ${task.ticket.url}` : "",
-        review ? `\n**Reviewer verdict:** ${review.verdict} (${review.findings.length} findings resolved)` : "",
-        `\n**Preview:** https://pr-<N>-${task.deps.config.raw.preview.project}.vercel.app (once deployed)`,
-        `\n**Cost:** see \`sdlc ledger --ticket ${task.ticket.key}\``,
-      ]
-        .filter(Boolean)
-        .join("\n"),
-      head: branch,
-      base,
-    })
+    const pr = await openPR(task.deps, prInput)
     return pr ? { skipped: false, pr: { number: pr.number, url: pr.url } } : { skipped: true }
   },
 })

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process"
-import { mkdirSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { promisify } from "node:util"
 import { describe, expect, it } from "vitest"
 import { Artifacts } from "../src/conductor/artifacts.js"
@@ -10,6 +10,27 @@ import { makeTempRepo, ticket, wireFakes } from "./helpers.js"
 const exec = promisify(execFile)
 
 describe("M3 PR plumbing", () => {
+  it("does not commit, push, or open a PR during a dry run", async () => {
+    const { dir, config } = await makeTempRepo()
+    const { deps, codehost } = wireFakes(config, [ticket({ key: "TST-DRY" })], { dryRun: true })
+    const worktree = await ensureWorktree(config, "TST-DRY")
+    writeFileSync(`${worktree}/feature.txt`, "practice change\n")
+    const task = {
+      ticket: ticket({ key: "TST-DRY" }),
+      worktree,
+      artifacts: new Artifacts(`${dir}/.sdlc/runs/TST-DRY`),
+      deps,
+      runId: "run_dry",
+    }
+
+    const result = await publishPhase.run!(task, {})
+    expect(result).toEqual({ skipped: true })
+    expect(codehost.calls.filter((call) => call.op === "openPR")).toHaveLength(0)
+    expect(readFileSync(`${worktree}/feature.txt`, "utf8")).toBe("practice change\n")
+    const { stdout } = await exec("git", ["status", "--porcelain"], { cwd: worktree })
+    expect(stdout).toContain("feature.txt")
+  })
+
   it("publishes uncommitted executor edits and reuses the existing PR on rerun", async () => {
     const { dir, config } = await makeTempRepo()
     const bare = `${dir}-origin.git`

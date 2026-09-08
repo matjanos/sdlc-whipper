@@ -1,15 +1,19 @@
 #!/usr/bin/env node
-import { loadDotEnv, loadConfig } from "./config.js"
+import path from "node:path"
+import { loadDotEnv, loadConfig, resolveModel } from "./config.js"
 import { flagBool, flagString, parseArgs } from "./util/args.js"
 import { createLogger } from "./util/log.js"
 import { createDeps, type RuntimeMode } from "./adapters/index.js"
 import { buildStatus } from "./conductor/status.js"
 import { deliverTask, runTick } from "./conductor/tick.js"
+import type { AgentRole } from "./types.js"
 import {
   renderDeliveryResult,
   renderDeliveryStart,
   renderError,
+  renderHarnesses,
   renderHelp,
+  renderHitch,
   renderLedger,
   renderRunStart,
   renderRunSummary,
@@ -33,9 +37,9 @@ async function main(): Promise<void> {
     return
   }
   const aliases: Record<string, string> = {
-    hit: "tick",
+    crack: "tick",
     run: "tick",
-    crack: "deliver",
+    hit: "deliver",
     cockpit: "serve",
     costs: "ledger",
   }
@@ -51,6 +55,32 @@ async function main(): Promise<void> {
     const runtimeFlag = flagString(args.flags, "runtime") as RuntimeMode | undefined
 
     switch (command) {
+      case "harness": {
+        const roles: AgentRole[] = ["groomer", "split", "researcher", "council", "executor", "reviewer", "tester"]
+        const rows = roles.map((role) => ({
+          role,
+          modelClass: config.raw.agents[role]?.model,
+          model: resolveModel(config, role),
+          steps: config.raw.agents[role]?.steps,
+        }))
+        if (flagBool(args.flags, "json")) console.log(JSON.stringify(rows, null, 2))
+        else console.log(renderHarnesses(rows, ui))
+        break
+      }
+      case "hitch": {
+        const deps = createDeps(config, log, { runtime: "none" })
+        const workspace = await deps.tracker.discoverWorkspace()
+        const report = {
+          project: path.basename(config.repoRoot),
+          configPath: config.configPath,
+          team: workspace.teamKey,
+          harnesses: 7,
+          adapters: config.raw.adapters,
+        }
+        if (flagBool(args.flags, "json")) console.log(JSON.stringify(report, null, 2))
+        else console.log(renderHitch(report, ui))
+        break
+      }
       case "status": {
         const deps = createDeps(config, log, { runtime: "none" })
         const report = await buildStatus(deps)
@@ -71,7 +101,7 @@ async function main(): Promise<void> {
       }
       case "deliver": {
         const key = args.positional[0]
-        if (!key) throw new Error("deliver: ticket key required, e.g. `sdlc deliver LIN-123`")
+        if (!key) throw new Error("hit: ticket key required, e.g. `whipper hit LIN-123`")
         const deps = createDeps(config, log, { runtime: runtimeFlag, dryRun })
         await deps.tracker.discoverWorkspace()
         const ticket = await deps.tracker.getTicket(key)
