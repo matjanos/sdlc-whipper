@@ -3,34 +3,40 @@ import { loadDotEnv, loadConfig } from "./config.js"
 import { flagBool, flagString, parseArgs } from "./util/args.js"
 import { createLogger } from "./util/log.js"
 import { createDeps, type RuntimeMode } from "./adapters/index.js"
-import { buildStatus, formatStatus } from "./conductor/status.js"
+import { buildStatus } from "./conductor/status.js"
 import { deliverTask, runTick } from "./conductor/tick.js"
+import {
+  renderDeliveryResult,
+  renderDeliveryStart,
+  renderError,
+  renderHelp,
+  renderLedger,
+  renderRunStart,
+  renderRunSummary,
+  renderStatus,
+  shouldUseColor,
+} from "./cli/ui.js"
 
-const HELP = `sdlc — autonomous SDLC conductor
-
-Usage:
-  sdlc status  [--config <path>] [--json]      read-only: what a tick would do and why
-  sdlc tick    [--config <path>] [--dry-run] [--runtime opencode|fake] [--no-groom]
-  sdlc deliver <KEY> [--config <path>] [--dry-run] [--runtime opencode|fake]
-  sdlc serve   [--config <path>] [--port 4747] live cockpit (state + SSE + actions)
-  sdlc ledger  [--config <path>] [--ticket KEY] [--by ticket|phase|run|agent]
-
-Environment: LINEAR_API_KEY (graphql adapter) or LINEAR_MCP_TOKEN (mcp adapter).
-Demo/offline: --runtime fake with "adapters": {"tracker":"fake",...} in config.
-Cockpit: SDL_SERVE_TOKEN (optional bearer), SDL_SERVE_HOST (default 127.0.0.1).
-
-Docs: README.md — ports/adapters, pipelines, budgets, the context firewall.`
+const VERSION = "0.1.0"
 
 async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2))
-  const command = args.command
-  if (!command || flagBool(args.flags, "help")) {
-    console.log(HELP)
-    process.exit(command && command !== "--help" ? 1 : 0)
+  const argv = process.argv.slice(2)
+  const args = parseArgs(argv)
+  const color = shouldUseColor(args.flags)
+  const ui = { color }
+  if (argv.includes("-v") || flagBool(args.flags, "version")) {
+    console.log(`whipper ${VERSION}`)
+    return
   }
+  if (!args.command || argv.includes("-h") || flagBool(args.flags, "help")) {
+    console.log(renderHelp(ui))
+    return
+  }
+  const aliases: Record<string, string> = { hit: "tick", run: "tick", cockpit: "serve", costs: "ledger" }
+  const command = aliases[args.command] ?? args.command
   loadDotEnv()
   const debug = flagBool(args.flags, "debug")
-  const log = createLogger(debug ? "debug" : "info")
+  const log = createLogger(debug ? "debug" : "info", { pretty: !debug })
   const configPath = flagString(args.flags, "config")
   const dryRun = flagBool(args.flags, "dry-run")
 
@@ -43,7 +49,7 @@ async function main(): Promise<void> {
         const deps = createDeps(config, log, { runtime: "none" })
         const report = await buildStatus(deps)
         if (flagBool(args.flags, "json")) console.log(JSON.stringify(report, null, 2))
-        else console.log(formatStatus(report))
+        else console.log(renderStatus(report, ui))
         break
       }
       case "tick": {
@@ -51,14 +57,10 @@ async function main(): Promise<void> {
         if (flagBool(args.flags, "no-groom")) {
           deps.config.raw.phases["groom"] = { enabled: false }
         }
-        log.info(`tick start${deps.dryRun ? " (DRY RUN)" : ""} — repo ${config.repoRoot}`)
+        console.log(renderRunStart(config.repoRoot, deps.dryRun, ui))
         const report = await runTick(deps)
-        log.info(`tick done: ${report.candidates.filter((c) => c.status !== "skipped").length} delivered, ${report.candidates.filter((c) => c.status === "skipped").length} skipped`)
-        for (const c of report.candidates) {
-          log.info(`  ${c.key}: ${c.status}${c.reason ? ` — ${c.reason}` : ""}`)
-        }
         const rollup = await deps.ledger.rollup("ticket")
-        for (const row of rollup) log.info(`  ledger ${row.key}: $${row.costUsd.toFixed(2)}, ${(row.tokens / 1000).toFixed(1)}k tokens, ${row.runs} calls`)
+        console.log(renderRunSummary(report.candidates, rollup, ui))
         break
       }
       case "deliver": {
@@ -67,9 +69,9 @@ async function main(): Promise<void> {
         const deps = createDeps(config, log, { runtime: runtimeFlag, dryRun })
         await deps.tracker.discoverWorkspace()
         const ticket = await deps.tracker.getTicket(key)
-        log.info(`delivering ${ticket.key}: ${ticket.title}${deps.dryRun ? " (DRY RUN)" : ""}`)
+        console.log(renderDeliveryStart(ticket.key, ticket.title, deps.dryRun, ui))
         const status = await deliverTask(deps, ticket)
-        log.info(`deliver ${ticket.key}: ${status}`)
+        console.log(renderDeliveryResult(ticket.key, status, ui, deps.dryRun))
         break
       }
       case "ledger": {
@@ -77,16 +79,7 @@ async function main(): Promise<void> {
         const by = (flagString(args.flags, "by") ?? "ticket") as "ticket" | "phase" | "run" | "agent"
         const ticket = flagString(args.flags, "ticket")
         const rows = await deps.ledger.rollup(by, ticket ? { ticket } : undefined)
-        if (rows.length === 0) {
-          console.log("ledger is empty")
-          break
-        }
-        console.log(`${by.padEnd(24)} ${"calls".padStart(6)} ${"tokens".padStart(14)} ${"costUsd".padStart(9)}`)
-        for (const r of rows) {
-          console.log(
-            `${r.key.slice(0, 24).padEnd(24)} ${String(r.runs).padStart(6)} ${String(r.tokens).padStart(14)} ${r.costUsd.toFixed(2).padStart(9)}`,
-          )
-        }
+        console.log(renderLedger(by, rows, ui))
         break
       }
       case "serve": {
@@ -95,15 +88,14 @@ async function main(): Promise<void> {
         const deps = createDeps(config, log, { runtime: "none" })
         const { createCockpitServer } = await import("./conductor/server.js")
         await createCockpitServer(deps, { port })
-        log.info(`serving cockpit for ${config.repoRoot} — Ctrl+C to stop`)
+        console.log(`\nWHIPPER  cockpit ready\n${config.repoRoot}\nPress Ctrl+C to stop.`)
         break
       }
       default:
-        console.error(`unknown command: ${command}\n\n${HELP}`)
-        process.exit(1)
+        throw new Error(`Unknown command “${args.command}”. Run \`whipper --help\` to see the trail map.`)
     }
   } catch (err) {
-    log.error((err as Error).message ?? String(err))
+    console.error(renderError((err as Error).message ?? String(err), ui))
     if (debug) console.error((err as Error).stack)
     process.exit(1)
   }

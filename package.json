@@ -2,13 +2,15 @@
   "name": "sdlc-conductor",
   "version": "0.1.0",
   "private": true,
-  "description": "Deterministic conductor for an autonomous SDLC pipeline (groom → plan → implement → review → test → PR) driven by LLM agents behind ports/adapters.",
+  "description": "A steady, deterministic hand for teams of software-delivery agents.",
   "type": "module",
   "bin": {
+    "whipper": "dist/cli.js",
     "sdlc": "dist/cli.js"
   },
   "main": "dist/cli.js",
   "scripts": {
+    "whipper": "tsx src/cli.ts",
     "sdlc": "tsx src/cli.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",

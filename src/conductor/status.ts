@@ -74,26 +74,25 @@ export async function buildStatus(deps: ConductorDeps): Promise<StatusReport> {
   }
 }
 
+/** Plain formatter retained for programmatic callers. The CLI's richer skin lives in cli/ui.ts. */
 export function formatStatus(r: StatusReport): string {
-  const lines: string[] = []
-  lines.push(`sdlc status — workspace ${r.workspace.team} (${r.config.adapters})`)
-  lines.push("")
-  lines.push(`Ready to deliver now: ${r.wouldDeliverNow}`)
-  for (const t of r.ready) lines.push(`  ✓ ${t.key}: ${t.title}`)
-  lines.push("")
-  lines.push(`Blocked (dependency graph): ${r.blocked.length}`)
-  for (const t of r.blocked) lines.push(`  ⛔ ${t.key} ← ${t.blocker}: ${t.title}`)
-  lines.push("")
-  lines.push(`Waiting for humans (needs-info): ${r.waitingForHuman.length}`)
-  for (const t of r.waitingForHuman) lines.push(`  ? ${t.key}: ${t.title}`)
-  lines.push("")
-  lines.push(`In flight: ${r.inFlight.length} (cap ${r.config.budget.maxParallelDeliveries})`)
-  for (const t of r.inFlight) lines.push(`  ↻ ${t.key}: ${t.title}`)
-  lines.push("")
-  lines.push(
-    `Budget/task: $${r.config.budget.perTaskUsd} or ${r.config.budget.perTaskTokens} tokens | phases on: ${
-      r.config.phasesEnabled.join(", ") || "(defaults)"
-    }${r.config.dryRun ? " | DRY RUN" : ""}`,
-  )
+  const lines = [
+    `WHIPPER  team ${r.workspace.team} · ${r.config.adapters}`,
+    "────────────────────────────────────────────────",
+    `● ${String(r.ready.length).padStart(2)}  ready at the gate`,
+    `◆ ${String(r.inFlight.length).padStart(2)}  on the trail · cap ${r.config.budget.maxParallelDeliveries}`,
+    `■ ${String(r.blocked.length).padStart(2)}  held by dependencies`,
+    `? ${String(r.waitingForHuman.length).padStart(2)}  waiting for you`,
+  ]
+  if (r.ready.length > 0) {
+    lines.push("", "READY AT THE GATE")
+    for (const t of r.ready) lines.push(`  ● ${t.key.padEnd(9)} ${t.title}`)
+  }
+  if (r.blocked.length > 0) {
+    lines.push("", "HELD BY DEPENDENCIES")
+    for (const t of r.blocked) lines.push(`  ■ ${t.key.padEnd(9)} ${t.title}\n      waiting for ${t.blocker}`)
+  }
+  lines.push("", "NEXT MOVE")
+  lines.push(r.wouldDeliverNow > 0 ? `  whipper hit  will dispatch ${r.wouldDeliverNow}` : "  Nothing to dispatch right now.")
   return lines.join("\n")
 }

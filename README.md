@@ -1,12 +1,14 @@
-# sdlc-conductor
+# Whipper
 
-A deterministic conductor for an autonomous software delivery pipeline: backlog grooming → acceptance-test-first planning → implementation → bounded review loops → preview-environment testing → PR. LLM agents (via [OpenCode](https://opencode.ai)) do the thinking; this program owns every loop, budget, and side effect.
+A steady, deterministic hand for a team of software-delivery agents. Each agent has a focused harness and limited context; Whipper keeps them moving along one bounded route: backlog grooming → acceptance-test-first planning → implementation → review → preview testing → PR.
+
+Agents do the thinking. **Whipper sets the route, pace, limits, and side effects.** It never merges.
 
 Humans stay in the loop where it matters: unclear tickets get questions on the ticket, and **merging stays human-only**.
 
 ```
                     ┌────────────────────────────────────────────┐
-                    │                CONDUCTOR                    │
+                    │                 WHIPPER                     │
                     │  (deterministic TS, no product LLM calls)   │
    cron / manual ─▶ │  tick: reconcile → dispatch → record        │
                     │  pipelines (data) · budgets · escalation    │
@@ -26,15 +28,16 @@ Humans stay in the loop where it matters: unclear tickets get questions on the t
 ```sh
 pnpm install
 pnpm test            # 70 offline tests: tick flow, firewall, loops, budget, adapters, runtime shapes
+pnpm whipper --help  # meet the friendly CLI
 ```
 
 ### Offline demo (no keys, no network)
 
 ```sh
 # any throwaway git repo with a .sdlc/config.json using the fake adapters
-pnpm sdlc status --config <repo>/.sdlc/config.json
-SDL_FAKE_TICKETS=./demo-tickets.json pnpm sdlc tick --config <repo>/.sdlc/config.json
-pnpm sdlc ledger --config <repo>/.sdlc/config.json
+pnpm whipper status --config <repo>/.sdlc/config.json
+SDL_FAKE_TICKETS=./demo-tickets.json pnpm whipper hit --config <repo>/.sdlc/config.json
+pnpm whipper ledger --config <repo>/.sdlc/config.json
 ```
 
 ### For real (against your repo + Linear + GitHub + Vercel)
@@ -43,18 +46,21 @@ For a concrete six-ticket offline backlog and sibling test app, see [the Polish-
 
 1. **Target repo**: copy [`examples/sdlc.config.json`](examples/sdlc.config.json) to `<repo>/.sdlc/config.json`, set `tracker.team`, `preview.project`, and the models. Gitignore `.sdlc/runs/`, `.sdlc/state.json`, `.ledger/`, and your worktrees directory.
 2. **Auth**: `LINEAR_API_KEY` (graph adapter) or `LINEAR_MCP_TOKEN` (MCP adapter) · `gh auth login` · model-provider keys live in your opencode user config (the embedded SDK host reuses them).
-3. **Observe first**: `pnpm sdlc status` — read-only, shows every candidate, blocker, and what a tick would do.
-4. **Dry run**: `pnpm sdlc tick --dry-run` — full pipeline, zero side effects.
-5. **Go live**: `pnpm sdlc tick` (or `sdlc deliver LIN-123` for one ticket).
+3. **Observe first**: `pnpm whipper status` — read-only, shows every candidate, blocker, and the recommended next move.
+4. **Practice**: `pnpm whipper hit --dry-run` — full pipeline, zero side effects.
+5. **Go live**: `pnpm whipper hit` (or `whipper deliver LIN-123` for one ticket).
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `sdlc status [--json]` | Read-only reconciliation: ready / blocked / needs-info / in-flight, with reasons |
-| `sdlc tick [--dry-run] [--runtime fake] [--no-groom]` | One reconcile-dispatch-record cycle (file-locked, crash-safe) |
-| `sdlc deliver <KEY>` | Run the delivery pipeline for one ticket, selected or not |
-| `sdlc ledger [--ticket KEY] [--by ticket\|phase\|run\|agent]` | Cost/token rollups per ticket, phase, run, or agent |
+| `whipper status [--json]` | A read-only team briefing: ready, blocked, waiting, and in-flight |
+| `whipper hit [--dry-run] [--runtime fake] [--no-groom]` | Scan the backlog and dispatch ready tickets (file-locked, crash-safe) |
+| `whipper deliver <KEY>` | Send one ticket through the delivery route |
+| `whipper cockpit [--port 4747]` | Serve the live project cockpit |
+| `whipper ledger [--ticket KEY] [--by ticket\|phase\|run\|agent]` | Cost/token rollups per ticket, phase, run, or agent |
+
+The former `sdlc` binary remains an alias. `run` and `tick` alias `hit`; `serve` aliases `cockpit`, so existing scripts keep working.
 
 ## Ports & adapters
 
@@ -104,7 +110,7 @@ Cost attribution: usage events carry the server-computed `cost`; offline rollups
 
 ```
 src/
-  cli.ts                 # sdlc status | tick | deliver | ledger
+  cli.ts                 # whipper status | hit | deliver | cockpit | ledger
   config.ts              # zod-validated .sdlc/config.json + selector mapping
   types.ts               # domain vocabulary (no vendor types)
   ports/                 # the 5 interfaces

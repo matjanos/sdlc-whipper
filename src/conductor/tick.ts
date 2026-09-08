@@ -197,7 +197,7 @@ export async function deliverTask(deps: ConductorDeps, ticket: Ticket): Promise<
   if (status === "delivered") {
     const publish = outcomes["publish"] as { skipped?: boolean } | undefined
     await moveTo(deps, ticket.key, "inReview")
-    log.info(`delivered${publish?.skipped ? " (stub run — no PR opened)" : ""}`)
+    log.info(`${deps.dryRun ? "practice route complete" : "delivered"}${publish?.skipped ? " (stub run — no PR opened)" : ""}`)
   } else {
     // escalated / parked / failed: stay In Progress; the escalation comment on
     // the ticket tells the human why. They decide the next move.

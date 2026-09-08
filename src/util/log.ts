@@ -10,11 +10,19 @@ export interface Logger {
   child(prefix: string): Logger
 }
 
-export function createLogger(level: LogLevel = "info"): Logger {
+export interface LoggerOptions {
+  /** Compact, human-oriented output for interactive terminals. */
+  pretty?: boolean
+}
+
+export function createLogger(level: LogLevel = "info", options: LoggerOptions = {}): Logger {
   const write = (lvl: LogLevel, prefix: string, msg: string, args: unknown[]) => {
     if (order[lvl] < order[level]) return
     const tag = prefix ? ` ${prefix}` : ""
-    const line = `${new Date().toISOString()} [${lvl.toUpperCase()}]${tag} ${msg}`
+    const glyph: Record<LogLevel, string> = { debug: "·", info: "│", warn: "!", error: "×" }
+    const line = options.pretty
+      ? `  ${glyph[lvl]}${prefix ? ` ${prefix.padEnd(12)}` : ""} ${msg}`
+      : `${new Date().toISOString()} [${lvl.toUpperCase()}]${tag} ${msg}`
     if (lvl === "error") console.error(line, ...args)
     else if (lvl === "warn") console.warn(line, ...args)
     else console.log(line, ...args)
