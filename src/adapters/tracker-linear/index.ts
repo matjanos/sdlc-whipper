@@ -48,7 +48,7 @@ interface GqlError extends Error {
 
 /**
  * Linear adapter for the TicketTracker port. Speaks logical states/labels
- * only; concrete names come from `.sdlc/config.json` and are validated against
+ * only; concrete names come from `.whipper/config.json` and are validated against
  * the live workspace on every discovery.
  */
 export class LinearTracker implements TicketTracker {

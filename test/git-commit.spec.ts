@@ -10,7 +10,7 @@ const exec = promisify(execFile)
 
 /**
  * publish-phase commit hygiene, verified with real git (no LLM): conductor and
- * runtime scratch dirs (.opencode, .sdlc) must never land in the commit — both
+ * runtime scratch dirs (.opencode, .whipper) must never land in the commit — both
  * when the target repo ignores them (the recommended setup) and when it does
  * not. Regression for the failed LAW-1 publish: exclude pathspecs abort
  * `git add` with exit 1 when the dirs are gitignored.
@@ -23,12 +23,12 @@ describe("commitAll scratch-dir hygiene (real git)", () => {
 
   it("never stages scratch dirs that are gitignored", async () => {
     const { dir } = await makeTempRepo()
-    await writeFile(path.join(dir, ".gitignore"), "node_modules/\n.opencode/\n.sdlc/\n")
+    await writeFile(path.join(dir, ".gitignore"), "node_modules/\n.opencode/\n.whipper/\n")
     await mkdir(path.join(dir, ".opencode"), { recursive: true })
-    await mkdir(path.join(dir, ".sdlc"), { recursive: true })
+    await mkdir(path.join(dir, ".whipper"), { recursive: true })
     await writeFile(path.join(dir, "src.js"), "export ok = 1\n")
     await writeFile(path.join(dir, ".opencode", "opencode.json"), "{}")
-    await writeFile(path.join(dir, ".sdlc", "state.json"), "{}")
+    await writeFile(path.join(dir, ".whipper", "state.json"), "{}")
     await exec("git", ["add", "-A"], { cwd: dir })
     await exec("git", ["commit", "-m", "init"], { cwd: dir })
 
@@ -46,10 +46,10 @@ describe("commitAll scratch-dir hygiene (real git)", () => {
     await exec("git", ["commit", "-m", "init"], { cwd: dir })
 
     await mkdir(path.join(dir, ".opencode"), { recursive: true })
-    await mkdir(path.join(dir, ".sdlc"), { recursive: true })
+    await mkdir(path.join(dir, ".whipper"), { recursive: true })
     await writeFile(path.join(dir, "feature.js"), "export feature = 1\n")
     await writeFile(path.join(dir, ".opencode", "opencode.json"), "{}")
-    await writeFile(path.join(dir, ".sdlc", "state.json"), "{}")
+    await writeFile(path.join(dir, ".whipper", "state.json"), "{}")
     await commitAll(dir, "sdlc: feature")
 
     expect(await stagedFiles(dir)).toEqual(["feature.js"])

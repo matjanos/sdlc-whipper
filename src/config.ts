@@ -102,10 +102,10 @@ export type RawConfig = z.output<typeof schema>
 export interface ResolvedConfig {
   raw: RawConfig
   configPath: string
-  /** Target repo root (git toplevel of the directory containing .sdlc/config.json). */
+  /** Target repo root (git toplevel of the directory containing .whipper/config.json). */
   repoRoot: string
-  /** Conductor scratch space inside the target repo: run state, artifacts, locks. Gitignore `.sdlc/runs` + `.sdlc/state.json`. */
-  sdlcDir: string
+  /** Conductor scratch space inside the target repo: run state, artifacts, locks. Gitignore `.whipper/runs` + `.whipper/state.json`. */
+  whipperDir: string
   artifactsDir: string
   worktreesDir: string
   ledgerDir: string
@@ -118,7 +118,7 @@ export class ConfigError extends Error {
   }
 }
 
-/** Find config: explicit path, else walk up from cwd looking for .sdlc/config.json. */
+/** Find config: explicit path, else walk up from cwd looking for .whipper/config.json. */
 export function discoverConfigPath(explicit?: string): string {
   if (explicit) {
     if (!existsSync(explicit)) throw new ConfigError(`config not found: ${explicit}`)
@@ -126,12 +126,12 @@ export function discoverConfigPath(explicit?: string): string {
   }
   let dir = process.cwd()
   for (;;) {
-    const candidate = path.join(dir, ".sdlc", "config.json")
+    const candidate = path.join(dir, ".whipper", "config.json")
     if (existsSync(candidate)) return candidate
     const parent = path.dirname(dir)
     if (parent === dir) {
       throw new ConfigError(
-        "no .sdlc/config.json found — pass --config <path> or create one (see examples/sdlc.config.json)",
+        "no .whipper/config.json found — pass --config <path> or create one (see examples/sdlc.config.json)",
       )
     }
     dir = parent
@@ -165,8 +165,8 @@ export async function loadConfig(explicit?: string): Promise<ResolvedConfig> {
     raw: parsed.data,
     configPath,
     repoRoot,
-    sdlcDir: path.join(repoRoot, ".sdlc"),
-    artifactsDir: path.join(repoRoot, ".sdlc", "runs"),
+    whipperDir: path.join(repoRoot, ".whipper"),
+    artifactsDir: path.join(repoRoot, ".whipper", "runs"),
     worktreesDir: path.resolve(repoRoot, parsed.data.worktrees.directory),
     ledgerDir: path.resolve(repoRoot, parsed.data.ledger.directory),
   }

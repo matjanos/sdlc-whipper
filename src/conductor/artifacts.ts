@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs"
 import path from "node:path"
 /**
- * Per-task artifact store: `<repoRoot>/.sdlc/runs/<ticket>/`. Artifacts are
+ * Per-task artifact store: `<repoRoot>/.whipper/runs/<ticket>/`. Artifacts are
  * the agent-to-agent "paper trail" (plan, acceptance, reviews) — the conductor
  * decides which artifact goes into which phase's prompt (context firewall).
  */

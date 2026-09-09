@@ -29,11 +29,11 @@ afterAll(() => {
   }
 })
 
-/** A real throwaway git repo with a .sdlc/config.json — worktree flows need real git. */
+/** A real throwaway git repo with a .whipper/config.json — worktree flows need real git. */
 export async function makeTempRepo(configOverrides: Record<string, unknown> = {}): Promise<{ dir: string; config: ResolvedConfig }> {
   const dir = path.join(tmpdir(), `sdlc-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
   tempDirs.push(dir)
-  mkdirSync(path.join(dir, ".sdlc"), { recursive: true })
+  mkdirSync(path.join(dir, ".whipper"), { recursive: true })
   await exec("git", ["init", "-b", "main"], { cwd: dir })
   await exec("git", ["config", "user.email", "test@test.test"], { cwd: dir })
   await exec("git", ["config", "user.name", "test"], { cwd: dir })
@@ -41,7 +41,7 @@ export async function makeTempRepo(configOverrides: Record<string, unknown> = {}
   await exec("git", ["add", "-A"], { cwd: dir })
   await exec("git", ["commit", "-m", "init"], { cwd: dir })
   writeFileSync(
-    path.join(dir, ".sdlc", "config.json"),
+    path.join(dir, ".whipper", "config.json"),
     JSON.stringify({
       adapters: { tracker: "fake", codehost: "fake", preview: "fake", runtime: "fake" },
       tracker: { team: "TST", map: { selected: "label:selected", needsInfo: "label:needs-info" } },
@@ -53,7 +53,7 @@ export async function makeTempRepo(configOverrides: Record<string, unknown> = {}
       ...configOverrides,
     }),
   )
-  const config = await loadConfig(path.join(dir, ".sdlc", "config.json"))
+  const config = await loadConfig(path.join(dir, ".whipper", "config.json"))
   return { dir, config }
 }
 

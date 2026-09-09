@@ -17,7 +17,7 @@ export interface IssueQuery {
 /**
  * Ticket tracker port. Default adapter: Linear. The core never learns whether
  * it is talking to Linear or Jira — logical states/labels only, mapped in
- * `.sdlc/config.json`.
+ * `.whipper/config.json`.
  */
 export interface TicketTracker {
   /** Resolve configured state/label selectors against the live workspace. Throws with a helpful message on unmapped names. */

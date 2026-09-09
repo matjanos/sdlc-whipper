@@ -21,7 +21,7 @@ describe("context firewall (golden prompt tests)", () => {
     const { config, dir } = await makeTempRepo()
     const { deps } = wireFakes(config, [])
     const phases = await loadPhases()
-    const artifacts = new Artifacts(`${dir}/.sdlc/runs/TST-1`)
+    const artifacts = new Artifacts(`${dir}/.whipper/runs/TST-1`)
     artifacts.set("plan.md", `# Plan\n\n${PLAN_SECRET} step one`)
     artifacts.setJSON("acceptance.json", {
       acceptanceTest: `${ACCEPTANCE_MARKER} given/when/then`,

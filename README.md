@@ -43,25 +43,25 @@ pnpm whipper --help  # meet the friendly CLI
 ### Offline demo (no keys, no network)
 
 ```sh
-# any throwaway git repo with a .sdlc/config.json using the fake adapters
-pnpm whipper status --config <repo>/.sdlc/config.json
-SDL_FAKE_TICKETS=./demo-tickets.json pnpm whipper crack --config <repo>/.sdlc/config.json
-pnpm whipper ledger --config <repo>/.sdlc/config.json
+# any throwaway git repo with a .whipper/config.json using the fake adapters
+pnpm whipper status --config <repo>/.whipper/config.json
+SDL_FAKE_TICKETS=./demo-tickets.json pnpm whipper crack --config <repo>/.whipper/config.json
+pnpm whipper ledger --config <repo>/.whipper/config.json
 ```
 
 These three commands are useful before letting anything loose: inspect the harnesses, confirm the project hitch, then check the backlog.
 
 ```sh
-pnpm whipper harness --config <repo>/.sdlc/config.json
-pnpm whipper hitch --config <repo>/.sdlc/config.json
-pnpm whipper status --config <repo>/.sdlc/config.json
+pnpm whipper harness --config <repo>/.whipper/config.json
+pnpm whipper hitch --config <repo>/.whipper/config.json
+pnpm whipper status --config <repo>/.whipper/config.json
 ```
 
 ### For real (against your repo + Linear + GitHub + Vercel)
 
 For a concrete six-ticket offline backlog and sibling test app, see [the Polish-law test request](examples/polish-law/README.md).
 
-1. **Target repo**: copy [`examples/sdlc.config.json`](examples/sdlc.config.json) to `<repo>/.sdlc/config.json`, set `tracker.team`, `preview.project`, and the models. Gitignore `.sdlc/runs/`, `.sdlc/state.json`, `.ledger/`, and your worktrees directory.
+1. **Target repo**: run `pnpm whipper init` in it (or copy [`examples/sdlc.config.json`](examples/sdlc.config.json) to `<repo>/.whipper/config.json`), set `tracker.team`, `preview.project`, and the models. Gitignore `.whipper/runs/`, `.whipper/state.json`, `.ledger/`, and your worktrees directory (`init` offers to do this).
 2. **Auth**: `LINEAR_API_KEY` (graph adapter) or `LINEAR_MCP_TOKEN` (MCP adapter) · `gh auth login` · model-provider keys live in your opencode user config (the embedded SDK host reuses them).
 3. **Observe first**: `pnpm whipper status` — read-only, shows every candidate, blocker, and the recommended next move.
 4. **Practice**: `pnpm whipper crack --dry-run` — full pipeline, zero side effects.
@@ -94,7 +94,7 @@ The core speaks five ports and zero vendor names. Swapping a vendor = writing an
 | `LedgerStore` | `ledger-jsonl` | — | One line per model call, tagged run/ticket/phase/agent |
 
 ```jsonc
-// .sdlc/config.json (adapter selection)
+// .whipper/config.json (adapter selection)
 { "adapters": { "tracker": "linear-mcp", "codehost": "github", "preview": "vercel-mcp", "runtime": "opencode" } }
 ```
 
@@ -130,7 +130,7 @@ Cost attribution: usage events carry the server-computed `cost`; offline rollups
 ```
 src/
   cli.ts                 # whipper harness | hitch | status | crack | hit | cockpit | ledger
-  config.ts              # zod-validated .sdlc/config.json + selector mapping
+  config.ts              # zod-validated .whipper/config.json + selector mapping
   types.ts               # domain vocabulary (no vendor types)
   ports/                 # the 5 interfaces
   adapters/              # linear · linear-mcp · github · vercel · vercel-mcp · opencode · fakes · ledger

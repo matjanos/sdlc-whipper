@@ -9,6 +9,7 @@ import { deliverTask, runTick } from "./conductor/tick.js"
 import { setProgressDisabled } from "./util/progress.js"
 import { installShutdownHandlers, isShuttingDown } from "./util/shutdown.js"
 import { releaseTickLock } from "./util/lock.js"
+import { runInit } from "./cli/init.js"
 import type { AgentRole } from "./types.js"
 import {
   renderDeliveryResult,
@@ -55,6 +56,10 @@ async function main(): Promise<void> {
   setProgressDisabled(!color)
 
   try {
+    if (command === "init") {
+      await runInit(args.flags)
+      return
+    }
     const config = await loadConfig(configPath)
     const runtimeFlag = flagString(args.flags, "runtime") as RuntimeMode | undefined
 
@@ -100,7 +105,7 @@ async function main(): Promise<void> {
         installShutdownHandlers({
           onInterrupt: () => {
             void deps.runtime.interruptAll()
-            releaseTickLock(config.sdlcDir)
+            releaseTickLock(config.whipperDir)
           },
         })
         console.log(renderRunStart(config.repoRoot, deps.dryRun, ui))

@@ -29,7 +29,7 @@ interface TickState {
 }
 
 function statePath(deps: ConductorDeps): string {
-  return path.join(deps.config.sdlcDir, "state.json")
+  return path.join(deps.config.whipperDir, "state.json")
 }
 
 function readTickState(deps: ConductorDeps): TickState {
@@ -71,7 +71,7 @@ export function classifyCandidate(deps: ConductorDeps, ticket: Ticket): string |
 
 /** One tick: reconcile → (maybe) groom → dispatch deliveries → record. Crash-safe by construction. */
 export async function runTick(deps: ConductorDeps): Promise<TickReport> {
-  return withTickLock(deps.config.sdlcDir, 30 * 60_000, async () => {
+  return withTickLock(deps.config.whipperDir, 30 * 60_000, async () => {
     const report: TickReport = { ts: new Date().toISOString(), dryRun: deps.dryRun, groom: { ran: false }, candidates: [] }
 
     // Validate the tracker mapping early — a misconfigured workspace fails fast, loudly.

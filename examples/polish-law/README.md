@@ -1,15 +1,15 @@
 # Polish-law conductor test
 
 Request: [request.md](request.md). Backlog: [tickets.json](tickets.json).
-Target: `~/code/test-sdlc-app`, an initialized Git repository with a runnable Node placeholder and `.sdlc/config.json` using all fake adapters.
+Target: `~/code/test-sdlc-app`, an initialized Git repository with a runnable Node placeholder and `.whipper/config.json` using all fake adapters.
 
 Run from your `sdlc-whipper` checkout:
 
 ```sh
 export SDL_FAKE_TICKETS="$PWD/examples/polish-law/tickets.json"
-pnpm sdlc status --config ../test-sdlc-app/.sdlc/config.json
-pnpm sdlc tick --config ../test-sdlc-app/.sdlc/config.json --dry-run
-pnpm sdlc ledger --config ../test-sdlc-app/.sdlc/config.json
+pnpm sdlc status --config ../test-sdlc-app/.whipper/config.json
+pnpm sdlc tick --config ../test-sdlc-app/.whipper/config.json --dry-run
+pnpm sdlc ledger --config ../test-sdlc-app/.whipper/config.json
 ```
 
 Expected initial status: LAW-1 ready; LAW-2 through LAW-6 blocked. A dry run exercises the fake phase pipeline for LAW-1. To exercise writable offline artifacts/worktrees and simulated publication, omit `--dry-run`. Fake agents do not implement the application and fake PR/preview success does not verify app behavior.

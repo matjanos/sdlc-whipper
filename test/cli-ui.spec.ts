@@ -77,7 +77,7 @@ describe("friendly CLI skin", () => {
 
     const hitch = renderHitch({
       project: "shop",
-      configPath: "/shop/.sdlc/config.json",
+      configPath: "/shop/.whipper/config.json",
       team: "ENG",
       harnesses: 7,
       adapters: { tracker: "linear", codehost: "github", preview: "vercel", runtime: "opencode" },

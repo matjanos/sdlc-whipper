@@ -18,7 +18,7 @@ describe("M3 PR plumbing", () => {
     const task = {
       ticket: ticket({ key: "TST-DRY" }),
       worktree,
-      artifacts: new Artifacts(`${dir}/.sdlc/runs/TST-DRY`),
+      artifacts: new Artifacts(`${dir}/.whipper/runs/TST-DRY`),
       deps,
       runId: "run_dry",
     }
@@ -44,7 +44,7 @@ describe("M3 PR plumbing", () => {
     const task = {
       ticket: ticket({ key: "TST-1" }),
       worktree,
-      artifacts: new Artifacts(`${dir}/.sdlc/runs/TST-1`),
+      artifacts: new Artifacts(`${dir}/.whipper/runs/TST-1`),
       deps,
       runId: "run_m3",
     }

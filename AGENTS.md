@@ -21,7 +21,7 @@ A deterministic conductor orchestrating LLM agents through an autonomous SDLC pi
 ## Conventions
 
 - TypeScript, ESM, strict. Relative imports use `.js` extensions (NodeNext).
-- Model references are **classes** (`reasoner`, `workhorse`) mapped to concrete ids in each repo's `.sdlc/config.json` — never hardcode model ids in code or prompts.
+- Model references are **classes** (`reasoner`, `workhorse`) mapped to concrete ids in each repo's `.whipper/config.json` — never hardcode model ids in code or prompts.
 - Prompts live in `prompts/agents/*.md` (system prompts, injected into worktrees by the runtime adapter) and `prompts/phases/*.md` (task templates with `{{vars}}`). Output contracts are fenced-```json verdict blocks parsed by `extractVerdict`/`validateVerdict`.
 - Adding a phase: file in `src/phases/` importing from `base.ts`, register in `registry.ts`, add a pipeline step, add prompt(s), extend the firewall test if the phase has isolation requirements.
 - New adapter: implement the port, add a shared contract test (run it against the fake and — env-gated — against the real service), register in `src/adapters/index.ts`, extend the config enum.

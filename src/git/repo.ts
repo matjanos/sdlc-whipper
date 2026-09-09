@@ -48,7 +48,7 @@ export async function commitAll(worktree: string, message: string): Promise<void
   // with exit 1 when those dirs ARE gitignored — which is the recommended
   // target-repo setup — so publishing would fail on every such repo.
   await mustRun("git add", "git", ["add", "-A", "--", "."], { cwd: worktree })
-  await mustRun("git reset", "git", ["reset", "-q", "--", ".opencode", ".sdlc"], { cwd: worktree })
+  await mustRun("git reset", "git", ["reset", "-q", "--", ".opencode", ".whipper"], { cwd: worktree })
   const identity = await commitIdentity(worktree)
   await mustRun("git commit", "git", [...identity, "commit", "-m", message], { cwd: worktree })
 }

@@ -31,6 +31,6 @@ See [`AGENTS.md`](AGENTS.md) for the full development guide.
 - Keep changes focused and explain the user-facing outcome.
 - Add or update tests for behavior changes.
 - Run the commands above before opening a PR.
-- Never include credentials, target-repository artifacts, or `.sdlc/runs/` data.
+- Never include credentials, target-repository artifacts, or `.whipper/runs/` data.
 
 Small issues and draft PRs are welcome. If a design affects a port, context boundary, or durable-state rule, open an issue first so the contract can be discussed explicitly.

@@ -143,7 +143,7 @@ export class OpenCodeRuntime implements AgentRuntime {
     const problems = invalidModelRefs(refs, catalog)
     if (problems.length > 0) {
       throw new Error(
-        `opencode runtime: unknown model configuration(s) — check models/agents in .sdlc/config.json (see \`opencode models\`):\n` +
+        `opencode runtime: unknown model configuration(s) — check models/agents in .whipper/config.json (see \`opencode models\`):\n` +
           problems.map((p) => `  ${p.role}: ${p.ref} — ${p.detail}`).join("\n"),
       )
     }
