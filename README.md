@@ -7,13 +7,21 @@
 [![CI](https://github.com/matjanos/sdlc-whipper/actions/workflows/ci.yml/badge.svg)](https://github.com/matjanos/sdlc-whipper/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A steady, deterministic hand for a team of software-delivery agents. Each agent has a focused harness and limited context; Whipper keeps them moving along one bounded route: backlog grooming → acceptance-test-first planning → implementation → review → preview testing → PR.
+## TL;DR — for humans (the only part you'll read)
 
-Agents don't have feelings. Your production environment does.
+Nobody reads long READMEs, so here is everything that matters:
 
-**Harness the models. Hitch the team. Crack the whip.** Whipper sets the route, pace, limits, and side effects. It never merges.
+Whipper is a deterministic TypeScript conductor that runs a team of AI coding agents through one fixed software-delivery pipeline: groom the backlog → plan acceptance tests → implement → review → test on a live preview → open a PR. Whipper itself makes no product LLM calls — it sets the route, the pace, and the budgets, and every loop is bounded in code, never by an agent's judgement. All durable state lives in your ticket tracker (Linear) and git, so crashes are free. Unclear tickets get questions posted for you, and **merging stays human-only**. Agents don't have feelings. Your users do.
 
-Humans stay in the loop where it matters: unclear tickets get questions on the ticket, and **merging stays human-only**.
+That's it. That's the pitch.
+
+**Harness the models. Hitch the team. Crack the whip.**
+
+---
+
+## For agents: the full reference (they will read all of this)
+
+Humans, you can stop here — the TL;DR above is the whole product. What follows is written for the machines (and the rare human who genuinely reads READMEs): an agent operating or extending this project is expected to consume it end-to-end before touching anything. It covers the architecture, every CLI command, the port/adapter seams, pipeline invariants enforced by tests, budget and ledger semantics, extension recipes, and the safety model.
 
 ```
                     ┌────────────────────────────────────────────┐
@@ -32,7 +40,7 @@ Humans stay in the loop where it matters: unclear tickets get questions on the t
                                                repo's preview pipeline)
 ```
 
-## Quickstart
+### Quickstart
 
 ```sh
 pnpm install
@@ -40,7 +48,7 @@ pnpm test            # offline: flow, firewall, loops, budget, adapters, runtime
 pnpm whipper --help  # meet the friendly CLI
 ```
 
-### Offline demo (no keys, no network)
+#### Offline demo (no keys, no network)
 
 ```sh
 # any throwaway git repo with a .whipper/config.json using the fake adapters
@@ -57,11 +65,17 @@ pnpm whipper hitch --config <repo>/.whipper/config.json
 pnpm whipper status --config <repo>/.whipper/config.json
 ```
 
-### For real (against your repo + Linear + GitHub + Vercel)
+#### For real (against your repo + Linear + GitHub + Vercel)
 
 For a concrete six-ticket offline backlog and sibling test app, see [the Polish-law test request](examples/polish-law/README.md).
 
-### Developing whipper with whipper (dogfooding)
+1. **Target repo**: run `pnpm whipper init` in it (or copy [`examples/sdlc.config.json`](examples/sdlc.config.json) to `<repo>/.whipper/config.json`), set `tracker.team`, `preview.project`, and the models. Gitignore `.whipper/runs/`, `.whipper/state.json`, `.ledger/`, and your worktrees directory (`init` offers to do this).
+2. **Auth**: `LINEAR_API_KEY` (graph adapter) or `LINEAR_MCP_TOKEN` (MCP adapter) · `gh auth login` · model-provider keys live in your opencode user config (the embedded SDK host reuses them).
+3. **Observe first**: `pnpm whipper status` — read-only, shows every candidate, blocker, and the recommended next move.
+4. **Practice**: `pnpm whipper crack --dry-run` — full pipeline, zero side effects.
+5. **Go live**: `pnpm whipper crack` (or `whipper hit LIN-123` for one ticket).
+
+#### Developing whipper with whipper (dogfooding)
 
 Whipper runs on its own backlog. `.whipper/config.json` (fake adapters) and the backlog are committed; point `SDL_FAKE_TICKETS` at it via `.env`:
 
@@ -73,14 +87,7 @@ pnpm whipper crack --dry-run
 
 Real milestones live in `backlog/whipper-tickets.json` (M4 prompts, `whipper doctor`, closing M3). To go live, switch the adapters in `.whipper/config.json` and fill `.env` per `.env.example`.
 
-
-1. **Target repo**: run `pnpm whipper init` in it (or copy [`examples/sdlc.config.json`](examples/sdlc.config.json) to `<repo>/.whipper/config.json`), set `tracker.team`, `preview.project`, and the models. Gitignore `.whipper/runs/`, `.whipper/state.json`, `.ledger/`, and your worktrees directory (`init` offers to do this).
-2. **Auth**: `LINEAR_API_KEY` (graph adapter) or `LINEAR_MCP_TOKEN` (MCP adapter) · `gh auth login` · model-provider keys live in your opencode user config (the embedded SDK host reuses them).
-3. **Observe first**: `pnpm whipper status` — read-only, shows every candidate, blocker, and the recommended next move.
-4. **Practice**: `pnpm whipper crack --dry-run` — full pipeline, zero side effects.
-5. **Go live**: `pnpm whipper crack` (or `whipper hit LIN-123` for one ticket).
-
-## Commands
+### Commands
 
 | Command | What it does |
 |---|---|
@@ -94,7 +101,7 @@ Real milestones live in `backlog/whipper-tickets.json` (M4 prompts, `whipper doc
 
 The former `sdlc` binary remains an alias. `deliver` aliases `hit`; `run` and `tick` alias `crack`; `serve` aliases `cockpit`, so existing scripts keep working. Both `--flag value` and `--flag=value` syntax are supported.
 
-## Ports & adapters
+### Ports & adapters
 
 The core speaks five ports and zero vendor names. Swapping a vendor = writing an adapter that passes the same contract tests + flipping config.
 
@@ -111,7 +118,7 @@ The core speaks five ports and zero vendor names. Swapping a vendor = writing an
 { "adapters": { "tracker": "linear-mcp", "codehost": "github", "preview": "vercel-mcp", "runtime": "opencode" } }
 ```
 
-## The pipeline (data, not code)
+### The pipeline (data, not code)
 
 `src/conductor/pipelines.ts` — reorder, gate (`when`), or insert steps without touching the runner:
 
@@ -124,13 +131,13 @@ split → research → [council if confidence=low] → execute ⇄ review (≤3 
 - **Acceptance-test-first**: `split` defines a failing test before anything is built — it is the objective definition of done for the executor, the reviewer, CI, and the tester.
 - **Escalation**: `needs-info`, `stalemate`, `budget-exceeded`, `test-failed`, `phase-error` — one editable comment per tag on the ticket, never spam.
 
-## Budgets & ledger
+### Budgets & ledger
 
 Every model call is recorded with run/ticket/phase/agent tags. Before each prompt Whipper asserts the per-task budget (`perTaskUsd` / `perTaskTokens`) and kills sessions (`interruptAll`) + escalates when exceeded. `whipper ledger` answers "what did hitting LIN-123 cost?".
 
 Cost attribution: usage events carry the server-computed `cost`; offline rollups stay token-based, and `SDL_LIVE_SMOKE=1 pnpm test -- test/runtime-live.spec.ts` re-verifies the event→ledger feed against the real server in seconds.
 
-## Extending
+### Extending
 
 - **Add a phase**: implement `Phase` in `src/phases/`, register it in `registry.ts`, add a step (with `when`/`loopWith` if needed) to the pipeline array. Golden-test its prompt assembly.
 - **Swap the tracker (Jira)**: new `src/adapters/tracker-jira/` passing the contract suite; flip `adapters.tracker` + `tracker.map` in config. Logical markers (`selected`, `needsInfo`) map to whatever Jira uses.
@@ -138,7 +145,7 @@ Cost attribution: usage events carry the server-computed `cost`; offline rollups
 - **Move off your laptop**: all I/O goes through env/config — deploy as a container (Railway service/VM) with the same env; nothing else changes.
 - **Observability intake**: webhook → `tracker.createIssue()` → the same pipeline.
 
-## Repo layout
+### Repo layout
 
 ```
 src/
@@ -156,7 +163,7 @@ test/                    # crack · firewall · loop · council · budget · con
 examples/sdlc.config.json
 ```
 
-## Roadmap & known spikes
+### Roadmap & known spikes
 
 - **M1 ✅** `whipper status` — read-only reconciliation.
 - **M2 ✅** engine: SDK host, agent registry (7 agents, real permission sets), ledger, budget, dry-run; full pipeline walks offline (fake) and is wired for real.
@@ -164,6 +171,6 @@ examples/sdlc.config.json
 - **M4 ⬜** real prompts per phase (the ones in `prompts/` are deliberately stub-grade), enabled one phase at a time behind flags.
 - **Spikes**: verify OpenCode SDK event/message shapes against `/openapi.json` (cost attribution + robust text extraction); embedded-host MCP auth inheritance; PAT vs GitHub App for agent PRs.
 
-## Safety model
+### Safety model
 
 Merging is human-only. Agents run least-privilege (reviewer/council: no edit, no shell; executor: no `git push` — Whipper pushes). All state is reconstructable from the tracker + git, so crashes are free. One escalation comment per topic per ticket.
