@@ -31,8 +31,8 @@
     "pollMs": 10000
   },
   "models": {
-    "reasoner": "anthropic/claude-sonnet-4-5#high",
-    "workhorse": "anthropic/claude-haiku-4"
+    "reasoner": "zai-coding-plan/glm-5.3#high",
+    "workhorse": "zai-coding-plan/glm-5.3-flash"
   },
   "agents": {
     "groomer": {
@@ -60,7 +60,7 @@
   "budget": {
     "maxParallelDeliveries": 2,
     "perTaskUsd": 15,
-    "perTaskTokens": 4000000,
+    "perTaskTokens": 20000000,
     "maxLoopRounds": 3
   },
   "phases": {

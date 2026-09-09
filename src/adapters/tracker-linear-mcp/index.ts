@@ -77,6 +77,7 @@ export class LinearMcpTracker implements TicketTracker {
   }
 
   async discoverWorkspace(): Promise<WorkspaceMap> {
+    if (this.ws) return this.ws // one discovery per process; states/labels rarely change mid-run (restart to re-map)
     const raw = await this.call(
       "list statuses",
       ["list_issue_statuses", "list_workflow_statuses", "list_statuses"],

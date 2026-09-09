@@ -1,13 +1,13 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import path from "node:path"
 import type { ResolvedConfig } from "../config.js"
-import { projectScope, selectorFor } from "../config.js"
-import type { LedgerStore } from "../ports/index.js"
-import type { TicketTracker } from "../ports/index.js"
+import { selectorFor } from "../config.js"
+import type { LedgerStore, TicketTracker } from "../ports/index.js"
 import type { Logger } from "../util/log.js"
-import type { RunState, Ticket } from "../types.js"
+import type { RunState } from "../types.js"
 import { classifyCandidate } from "./tick.js"
 import type { ConductorDeps } from "./deps.js"
+import type { TrackerMirror } from "./tracker-mirror.js"
 
 /**
  * One read-only snapshot of the whole SDLC process, assembled from the same
@@ -19,6 +19,8 @@ import type { ConductorDeps } from "./deps.js"
 
 export interface CockpitSnapshot {
   ts: string
+  /** Set when the tracker mirror is serving stale data (last sweep failed). */
+  degraded?: string
   project: {
     repoRoot: string
     team: string
@@ -75,23 +77,13 @@ export interface OpencodeClient {
   "session.interrupt"(input: { sessionID: string; continue: boolean }): Promise<unknown>
 }
 
-export async function buildSnapshot(deps: SnapshotDeps): Promise<CockpitSnapshot> {
-  const { config, tracker, ledger, log } = deps
+export async function buildSnapshot(deps: SnapshotDeps, mirror: TrackerMirror): Promise<CockpitSnapshot> {
+  const { config, ledger, log } = deps
   const selectedName = selectorFor(config, "selected").name
   const needsInfoName = selectorFor(config, "needsInfo").name
 
-  // --- backlog + dependency graph -------------------------------------------
-  const all: Ticket[] = []
-  for (const state of ["backlog", "selected", "inProgress", "inReview", "done"] as const) {
-    for (const brief of await tracker.listIssues({ ...projectScope(config), state })) {
-      try {
-        all.push(await tracker.getTicket(brief.key))
-      } catch {
-        all.push(brief)
-      }
-    }
-  }
-  const deduped = [...new Map(all.map((t) => [t.key, t])).values()]
+  // --- backlog + dependency graph (from the local mirror — zero tracker calls) ---
+  const deduped = [...new Map((await mirror.tickets()).map((t) => [t.key, t])).values()]
   const tickets: CockpitSnapshot["tickets"] = deduped.map((t) => {
     const needsInfo = t.labels.includes(needsInfoName)
     const blockedBy = t.relations
@@ -167,6 +159,7 @@ export async function buildSnapshot(deps: SnapshotDeps): Promise<CockpitSnapshot
   log.debug(`snapshot: ${tickets.length} tickets, ${runs.length} runs, ${live.sessions.length} agent sessions`)
   return {
     ts: new Date().toISOString(),
+    degraded: mirror.degraded(),
     project: {
       repoRoot: config.repoRoot,
       team: config.raw.tracker.team,

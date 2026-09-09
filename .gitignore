@@ -9,3 +9,4 @@ package-lock.json
 .whipper/state.json
 .playwright-mcp/
 .whipper/tick.lock
+.whipper/tracker-cache.json

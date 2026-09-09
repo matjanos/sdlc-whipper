@@ -1,8 +1,10 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 import { readFileSync } from "node:fs"
+import path from "node:path"
 import { fileURLToPath } from "node:url"
 import type { ConductorDeps } from "./deps.js"
 import { buildSnapshot } from "./snapshot.js"
+import { TrackerMirror } from "./tracker-mirror.js"
 
 /**
  * `sdlc serve` — the cockpit server. Read-heavy by design: GET endpoints
@@ -23,6 +25,19 @@ export interface ServeOptions {
 export async function createCockpitServer(deps: ConductorDeps, opts: ServeOptions): Promise<Server> {
   const token = process.env["SDL_SERVE_TOKEN"]
   const host = opts.host ?? process.env["SDL_SERVE_HOST"] ?? "127.0.0.1"
+
+  // One local read-model shared by every endpoint. Reads never hit the
+  // tracker; a background loop keeps the mirror warm under the refresh
+  // policy (bounded cadence, backoff when the tracker throttles).
+  const mirror = new TrackerMirror(
+    deps.tracker,
+    path.join(deps.config.whipperDir, "tracker-cache.json"),
+    deps.log,
+    {},
+    { project: deps.config.raw.tracker.project },
+  )
+  const warmer = setInterval(() => void mirror.refreshIfDue(), 5_000)
+  warmer.unref?.()
 
   const server = createServer((req, res) => {
     void handle(req, res).catch((err) => {
@@ -52,7 +67,7 @@ export async function createCockpitServer(deps: ConductorDeps, opts: ServeOption
     }
 
     if (req.method === "GET" && url.pathname === "/api/state") {
-      const snapshot = await buildSnapshot(deps)
+      const snapshot = await buildSnapshot(deps, mirror)
       res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" })
       res.end(JSON.stringify(snapshot))
       return
@@ -69,7 +84,7 @@ export async function createCockpitServer(deps: ConductorDeps, opts: ServeOption
       const emit = async (): Promise<void> => {
         if (res.writableEnded || res.destroyed) return
         try {
-          const snapshot = await buildSnapshot(deps)
+          const snapshot = await buildSnapshot(deps, mirror)
           if (res.writableEnded || res.destroyed) return
           const json = JSON.stringify(snapshot)
           // hash on content that matters — ts changes every poll
@@ -96,7 +111,7 @@ export async function createCockpitServer(deps: ConductorDeps, opts: ServeOption
       const action = body as { type?: string; sessionId?: string; pr?: number; body?: string }
       switch (action.type) {
         case "interrupt": {
-          const killed = await interruptSessions(deps, action.sessionId)
+          const killed = await interruptSessions(deps, mirror, action.sessionId)
           res.writeHead(200, { "content-type": "application/json" })
           res.end(JSON.stringify({ ok: true, interrupted: killed }))
           return
@@ -149,8 +164,8 @@ async function readBody(req: IncomingMessage): Promise<Record<string, unknown>> 
 }
 
 /** Kill one sdlc session (sessionId) or every running one for this project. */
-async function interruptSessions(deps: ConductorDeps, sessionId?: string): Promise<number> {
-  const snapshot = await buildSnapshot(deps)
+async function interruptSessions(deps: ConductorDeps, mirror: TrackerMirror, sessionId?: string): Promise<number> {
+  const snapshot = await buildSnapshot(deps, mirror)
   const targets = snapshot.live.sessions.filter((s) => (sessionId ? s.id === sessionId : s.running))
   if (!snapshot.live.serviceUp) throw new Error("opencode service not reachable")
   const [{ OpenCode }, { Service }] = (await Promise.all([

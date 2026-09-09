@@ -37,6 +37,21 @@
   @keyframes breath{50%{opacity:.45}}
   #clock{font-size:11px;color:var(--dim);letter-spacing:.12em}
 
+  /* boot overlay — shown until the first snapshot lands */
+  .boot{position:fixed;inset:0;z-index:80;background:var(--ink);display:flex;align-items:center;justify-content:center;transition:opacity .45s ease}
+  .boot.gone{opacity:0;pointer-events:none}
+  .bootbox{display:flex;flex-direction:column;align-items:center;gap:16px}
+  .bootbox .lamp i{width:12px;height:12px}
+  .bootword{font-family:var(--serif);font-style:italic;font-size:38px;color:var(--paper)}
+  .bootword span{color:var(--faint);font-family:var(--mono);font-style:normal;font-size:9.5px;letter-spacing:.34em;text-transform:uppercase;display:block;text-align:center;margin-top:6px}
+  .bootline{font-size:9.5px;letter-spacing:.28em;text-transform:uppercase;color:var(--faint);animation:breath 1.6s ease-in-out infinite}
+  .boot.err .bootline{color:var(--amber);animation:none}
+
+  /* degraded banner — mirror is stale */
+  .degrade{display:none;align-items:baseline;gap:10px;padding:8px 14px;margin-top:12px;border:1px solid var(--amber);background:rgba(242,178,62,.07);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
+  .degrade.on{display:flex}
+  .degrade b{color:var(--paper);font-weight:500}
+
   /* grid */
   .deck{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;padding-top:16px}
   .col{display:flex;flex-direction:column;gap:16px;min-width:0}
@@ -152,6 +167,8 @@
     </div>
   </header>
 
+  <div class="degrade" id="degrade"><span>◍ stale mirror</span><b id="degradeMsg"></b><span>retrying in background</span></div>
+
   <div class="deck">
     <div class="col">
       <div class="box">
@@ -196,6 +213,13 @@
   </footer>
 </div>
 <div class="toast" id="toast"></div>
+<div class="boot" id="boot">
+  <div class="bootbox">
+    <div class="lamp on"><i></i></div>
+    <div class="bootword">the cockpit<span>whipper · process state</span></div>
+    <div class="bootline" id="bootLine">connecting to the conductor…</div>
+  </div>
+</div>
 
 <script>
 "use strict";
@@ -205,19 +229,47 @@ let state = null, selected = null, feed = "poll";
 /* ---------- clock ---------- */
 setInterval(() => { $("clock").textContent = new Date().toISOString().slice(11,19) + " UTC" }, 1000);
 
+/* ---------- boot overlay + degraded banner ---------- */
+let booted = false;
+function bootMsg(text, err){
+  if (booted) return;
+  const b = $("boot");
+  if (!b) return;
+  b.classList.toggle("err", !!err);
+  $("bootLine").textContent = text;
+}
+function bootDone(){
+  if (booted) return;
+  booted = true;
+  const b = $("boot");
+  if (!b) return;
+  b.classList.add("gone");
+  setTimeout(() => b.remove(), 600);
+}
+function renderDegraded(s){
+  const el = $("degrade");
+  if (!el) return;
+  el.classList.toggle("on", !!s.degraded);
+  $("degradeMsg").textContent = s.degraded ?? "";
+}
+
 /* ---------- data feed: SSE with polling fallback ---------- */
 function render(s){
   state = s;
   try{
     renderHeader(s); renderCounts(s); renderGraph(s); renderFloor(s);
-    renderBudget(s); renderLog(s); renderRuns(s); renderCard(s);
+    renderBudget(s); renderLog(s); renderRuns(s); renderCard(s); renderDegraded(s);
   }catch(e){ console.error(e); }
+  bootDone();
 }
 async function poll(){
   try{
     const r = await fetch("/api/state");
-    if(r.ok) render(await r.json());
-  }catch{ /* Whipper down */ }
+    if(r.ok){ render(await r.json()); }
+    else { bootMsg(`conductor responded ${r.status} — retrying…`, true); }
+  }catch{
+    bootMsg("cannot reach the conductor — retrying…", true);
+  }
 }
 if(typeof EventSource !== "undefined"){
   const es = new EventSource("/api/events");
