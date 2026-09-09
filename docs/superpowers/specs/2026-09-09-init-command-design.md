@@ -1,7 +1,7 @@
 # `whipper init` — default config generator
 
 Date: 2026-09-09
-Status: approved design, pending implementation
+Status: approved design, revision B (interactive wizard via `@clack/prompts`), pending implementation
 
 ## Problem
 
@@ -9,61 +9,79 @@ The CLI expects `.whipper/config.json` (discovered by walking up from cwd, or vi
 
 ## Goal
 
-A new `whipper init` command that generates a valid `.whipper/config.json` in the current repo, filling in what flags provide and clearly listing what remains to edit.
+A new `whipper init` command that generates a valid `.whipper/config.json` in the current repo — interactively when a terminal is attached, flag-driven otherwise — and clearly lists what remains to edit.
 
-Non-goals: no interactive wizard, no environment sniffing, no live validation of Linear/Vercel workspaces (that is `whipper hitch`'s job after a config exists).
+Non-goals: no environment sniffing, no live validation of Linear/Vercel workspaces (that is `whipper hitch`'s job after a config exists).
+
+## CLI framework decision
+
+`@clack/prompts` is adopted for interactive prompts (text / select / confirm / spinner / intro-outro). It is a prompting toolkit, **not** a command router: top-level dispatch (`status`, `crack`, `hit`, …) stays on the existing tiny argv parser (`src/util/args.ts`), which clack does not replace. `init` is the only command using prompts in this revision; its look is consistent with the existing emoji CLI skin.
 
 ## CLI surface
 
 ```
-whipper init [--team <KEY>] [--preview-project <name>] [--fake] [--force] [--config <path>]
+whipper init [--team <KEY>] [--preview-project <name>] [--fake] [--force] [--config <path>] [--yes]
 ```
 
 | Flag | Effect |
 | --- | --- |
-| `--team <KEY>` | Fills `tracker.team`. Default: the placeholder `"TEAM"`. |
-| `--preview-project <name>` | Fills `preview.project`. Default: the placeholder `"your-project"`. |
-| `--fake` | Generate the all-fakes config (`tracker/codehost/preview/runtime = "fake"`), matching the README offline-demo flow. |
-| `--force` | Overwrite an existing config file. Without it, `init` refuses and exits with an error. |
+| `--team <KEY>` | Pre-fills `tracker.team`; skips its prompt. |
+| `--preview-project <name>` | Pre-fills `preview.project`; skips its prompt. |
+| `--fake` | Pre-selects the all-fakes adapter set (README offline-demo flow); skips the adapter prompt. |
+| `--force` | Overwrite an existing config without asking. |
 | `--config <path>` | Destination file. Default: `<cwd>/.whipper/config.json`. |
+| `--yes` | Non-interactive mode: skip every prompt, accept flags + defaults, emit placeholders for anything unset. |
 
 ## Behavior
 
 1. **Destination resolution**: `--config` wins; otherwise `.whipper/config.json` under the current working directory. `init` does NOT walk up the tree — it writes where it is told.
-2. **Generated content is built in code**, not copied from `examples/`. A new `src/init.ts` exports `initConfig(opts)` returning the config object. Rationale: `examples/` may not ship with an installed npm package, and an in-code default is unit-testable and cannot drift from the schema silently. The generated object mirrors `examples/sdlc.config.json`:
+2. **Interactive flow** (TTY, no `--yes`), powered by `@clack/prompts`:
+   - `intro` banner;
+   - `select`: adapter mode — real (`linear`/`github`/`vercel`/`opencode`) vs all-fakes; `--fake` skips;
+   - `text`: tracker team key (default `"TEAM"`); skipped when `--team` given;
+   - `text`: preview project (default `"your-project"`); skipped when `--preview-project` given;
+   - if the destination exists: `confirm` overwrite (without `--force`);
+   - `spinner` around write + round-trip validation;
+   - `outro` with next steps; `log.warn` lines for placeholders left to edit; `log.info` for env keys to set.
+   - **Cancellation**: every prompt's result goes through `isCancel`; on cancel → clack `cancel("init cancelled")` and exit 0. No partial file is written (write happens once, after all prompts).
+3. **Non-interactive fallback** (no TTY or `--yes`): no prompts at all — flags + defaults produce the template, placeholders reported in the final output. This keeps CI, pipes, and tests deterministic.
+4. **Generated content is built in code**, not copied from `examples/`. Rationale: `examples/` may not ship with an installed npm package, and an in-code default is unit-testable and cannot drift from the schema silently. The generated object mirrors `examples/sdlc.config.json`:
    - real adapters by default: `linear`, `github`, `vercel`, `opencode`;
    - explicit `tracker.map` (same selector defaults the schema applies anyway — spelled out so the file is self-documenting);
    - model classes `reasoner`/`workhorse` mapped to the anthropic ids used in the example; `agents` roles wired to those classes;
-   - `--fake` switches the four adapters to `fake` (models stay as valid references; fakes ignore them).
-3. **Placeholders**: values not provided via flags are emitted as placeholder strings (`tracker.team: "TEAM"`, `preview.project: "your-project"`). `initConfig` returns the list of fields left as placeholders so the CLI can print them.
-4. **Overwrite guard**: if the destination exists and `--force` is absent → `ConfigError`-style failure, non-zero exit, file untouched.
-5. **Gitignore assist**: if `<cwd>/.gitignore` exists, append (once, idempotent) a `# sdlc-whipper` block with `.whipper/runs/`, `.whipper/state.json`, `.ledger/` — but only lines not already present. No `.gitignore` in cwd → skip silently.
-6. **Round-trip validation**: after writing, `init` loads the file through the existing zod schema (`loadConfig`). `init` can never emit a config the CLI cannot parse.
-7. **Output**: the written path, the adapter set, the list of placeholders to edit, the env keys to set (`LINEAR_API_KEY` or `LINEAR_MCP_TOKEN`, `gh auth login`), and the suggested next commands (`whipper status`, `whipper crack --dry-run`).
+   - fake mode switches the four adapters to `fake` (models stay as valid references; fakes ignore them).
+5. **Overwrite guard**: if the destination exists, interactive mode asks via `confirm`; non-interactive mode refuses with an error unless `--force`. The file is never touched on refusal.
+6. **Gitignore assist**: if `<cwd>/.gitignore` exists, append (once, idempotent) a `# sdlc-whipper` block with `.whipper/runs/`, `.whipper/state.json`, `.ledger/` — but only lines not already present. No `.gitignore` in cwd → skip silently.
+7. **Round-trip validation**: after writing, the file is loaded through the existing zod schema (`loadConfig`). `init` can never emit a config the CLI cannot parse.
 
 ## Wiring
 
-- `src/init.ts` (new): `initConfig(opts: InitOptions): { config: unknown; placeholders: string[] }` and `initGitignore(dir: string): boolean`. Pure fs + object construction; no CLI concerns.
+- `src/init.ts` (new, **pure**): `buildConfig(opts)` returns `{ config: unknown; placeholders: string[] }`; `applyGitignore(dir)` returns whether it modified the file. Object construction + fs only — no prompts, no CLI concerns. This is the unit-testable core.
+- `src/cli/init.ts` (new): `runInit(flags)` — clack orchestration, non-interactive detection (`process.stdout.isTTY` / `--yes`), flags parsing via `flagString`/`flagBool`. Thin by design: all decisions come from `src/init.ts` data.
 - `src/cli.ts`: `init` is dispatched **before** `loadConfig()` (next to alias resolution), because it runs when no config exists yet. It does not depend on `loadDotEnv()` results.
-- `src/cli/ui.ts`: `renderInit(result, ui)` and a help-text entry under **FIRST RIDE** (`whipper init` → `whipper status` → `whipper crack --dry-run`), keeping presentation out of `cli.ts` per existing convention.
-- The `--config` flag already parses in `parseArgs`; `init` reads it directly with `flagString`.
+- `src/cli/ui.ts`: help-text entry under **FIRST RIDE** (`whipper init` → `whipper status` → `whipper crack --dry-run`).
+- Dependency: `@clack/prompts` added to `dependencies` (ESM-native, no transitive deps).
 
 ## Error handling
 
 | Situation | Result |
 | --- | --- |
-| Destination exists, no `--force` | Error: path + hint to use `--force`; exit non-zero |
+| User cancels a prompt (Ctrl+C / esc) | clack `cancel` message, exit 0, nothing written |
+| Destination exists, non-interactive, no `--force` | Error: path + hint to use `--force`; exit non-zero |
 | Destination not writable | Error surfaced from fs with path context |
+| cwd is not inside a git repo | Round-trip validation fails with the existing "target repo must be a git checkout" message — correct, since the conductor requires git anyway |
 | Post-write validation fails | Bug guard — error includes the zod issue list (would indicate schema drift) |
 
-## Testing (`test/init.spec.ts`, pure fs, no git fixtures)
+## Testing (`test/init.spec.ts`, pure fs, no TTY driving)
 
-1. Generated file passes `loadConfig` (round-trip).
-2. `--team` / `--preview-project` values land in the file; omitted ones are reported as placeholders.
-3. `--fake` produces the four `fake` adapters.
-4. Refuses to overwrite without `--force`; overwrites with it.
-5. Gitignore block appended once; re-run with `--force` does not duplicate lines; missing `.gitignore` is skipped.
+The clack layer is kept thin and unmocked; everything under test lives in `src/init.ts` and the non-interactive path of `runInit`.
+
+1. `buildConfig` output passes `loadConfig` (round-trip, real + fake adapter variants).
+2. Flag values land in the file; omitted ones are reported as placeholders.
+3. Non-interactive `runInit` (`--yes`) writes the file; refuses overwrite without `--force`; overwrites with it.
+4. Gitignore block appended once; re-run does not duplicate lines; missing `.gitignore` is skipped.
+5. Non-TTY + no flags → same as `--yes` (no hang, deterministic output).
 
 ## Out of scope
 
-Interactive wizard, environment sniffing, live workspace validation, migrating a legacy `.sdlc/config.json`.
+Environment sniffing, live workspace validation, migrating a legacy `.sdlc/config.json`, retrofitting other commands with prompts.
