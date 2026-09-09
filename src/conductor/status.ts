@@ -1,5 +1,6 @@
 import type { ConductorDeps } from "./deps.js"
 import { needsInfoLabelName, selectedLabelName } from "./tick.js"
+import { projectScope } from "../config.js"
 import type { Ticket } from "../types.js"
 
 export interface StatusReport {
@@ -20,7 +21,7 @@ export interface StatusReport {
 /** Read-only reconciliation: what a tick would do and why. M1 deliverable. */
 export async function buildStatus(deps: ConductorDeps): Promise<StatusReport> {
   const ws = await deps.tracker.discoverWorkspace()
-  const selected = await deps.tracker.listIssues({ logicalLabel: "selected" })
+  const selected = await deps.tracker.listIssues({ ...projectScope(deps.config), logicalLabel: "selected" })
   const needsInfo = needsInfoLabelName(deps)
   const ready: StatusReport["ready"] = []
   const blocked: StatusReport["blocked"] = []
@@ -48,7 +49,7 @@ export async function buildStatus(deps: ConductorDeps): Promise<StatusReport> {
     }
   }
 
-  const inFlightBrief = await deps.tracker.listIssues({ state: "inProgress" })
+  const inFlightBrief = await deps.tracker.listIssues({ ...projectScope(deps.config), state: "inProgress" })
   const phasesEnabled = Object.entries(deps.config.raw.phases)
     .filter(([, v]) => v.enabled !== false)
     .map(([k]) => k)

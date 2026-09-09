@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { loadPhases } from "../phases/registry.js"
-import { selectorFor } from "../config.js"
+import { projectScope, selectorFor } from "../config.js"
 import { moveTo, escalate } from "./actions.js"
 import type { ConductorDeps } from "./deps.js"
 import { Artifacts } from "./artifacts.js"
@@ -84,7 +84,7 @@ export async function runTick(deps: ConductorDeps): Promise<TickReport> {
     if (groomCfg?.enabled !== false && Date.now() - last >= cadenceMs) {
       report.groom = { ran: true }
       try {
-        const backlog = await deps.tracker.listIssues({ state: "backlog" })
+        const backlog = await deps.tracker.listIssues({ ...projectScope(deps.config), state: "backlog" })
         if (backlog.length === 0) {
           report.groom.note = "backlog empty — nothing to groom"
         } else {
@@ -109,7 +109,7 @@ export async function runTick(deps: ConductorDeps): Promise<TickReport> {
     }
 
     // 2. Delivery candidates
-    const selected = await deps.tracker.listIssues({ logicalLabel: "selected" })
+    const selected = await deps.tracker.listIssues({ ...projectScope(deps.config), logicalLabel: "selected" })
     const results: TickCandidateResult[] = []
     const ready: Ticket[] = []
     for (const brief of selected) {
@@ -129,7 +129,7 @@ export async function runTick(deps: ConductorDeps): Promise<TickReport> {
     }
 
     // 3. Concurrency cap
-    const inFlight = (await deps.tracker.listIssues({ state: "inProgress" })).length
+    const inFlight = (await deps.tracker.listIssues({ ...projectScope(deps.config), state: "inProgress" })).length
     const slots = Math.max(0, deps.config.raw.budget.maxParallelDeliveries - inFlight)
     const toDeliver = ready.slice(0, slots)
     const overflow = ready.slice(slots)

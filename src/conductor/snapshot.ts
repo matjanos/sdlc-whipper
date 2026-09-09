@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import path from "node:path"
 import type { ResolvedConfig } from "../config.js"
-import { selectorFor } from "../config.js"
+import { projectScope, selectorFor } from "../config.js"
 import type { LedgerStore } from "../ports/index.js"
 import type { TicketTracker } from "../ports/index.js"
 import type { Logger } from "../util/log.js"
@@ -83,7 +83,7 @@ export async function buildSnapshot(deps: SnapshotDeps): Promise<CockpitSnapshot
   // --- backlog + dependency graph -------------------------------------------
   const all: Ticket[] = []
   for (const state of ["backlog", "selected", "inProgress", "inReview", "done"] as const) {
-    for (const brief of await tracker.listIssues({ state })) {
+    for (const brief of await tracker.listIssues({ ...projectScope(config), state })) {
       try {
         all.push(await tracker.getTicket(brief.key))
       } catch {

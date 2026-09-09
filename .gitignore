@@ -7,3 +7,5 @@ package-lock.json
 # sdlc-whipper
 .whipper/runs/
 .whipper/state.json
+.playwright-mcp/
+.whipper/tick.lock

@@ -1,9 +1,9 @@
 {
   "adapters": {
-    "tracker": "fake",
-    "codehost": "fake",
+    "tracker": "linear-mcp",
+    "codehost": "github",
     "preview": "fake",
-    "runtime": "fake"
+    "runtime": "opencode"
   },
   "repo": {
     "baseBranch": "main",
@@ -13,7 +13,8 @@
     "directory": "../worktrees"
   },
   "tracker": {
-    "team": "WHIP",
+    "team": "AXI",
+    "project": "SDLC Whipper",
     "map": {
       "selected": "label:sdlc-selected",
       "needsInfo": "label:needs-info",

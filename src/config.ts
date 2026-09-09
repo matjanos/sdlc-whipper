@@ -58,6 +58,8 @@ const schema = z.object({
   worktrees: z.object({ directory: z.string().default("../worktrees") }).default({}),
   tracker: z.object({
     team: z.string(),
+    /** Optional project scope: when set, the conductor only sees and moves tickets inside this tracker project. */
+    project: z.string().optional(),
     /** logical marker → concrete selector. Defaults cover the common Linear setup; everything is overridable. */
     map: z
       .record(z.string(), z.string())
@@ -196,6 +198,16 @@ export function selectorFor(config: ResolvedConfig, logical: string): Selector {
     throw new ConfigError(`tracker.map has no entry for "${logical}"`)
   }
   return parseSelector(raw, `tracker.map.${logical}`)
+}
+
+/**
+ * Project scope for every ticket query. With `tracker.project` set, whipper
+ * operates inside one project — the team stays the unit of states/labels, but
+ * backlog sweeps and delivery candidates never leak beyond the project fence.
+ */
+export function projectScope(config: ResolvedConfig): { project?: string } {
+  const project = config.raw.tracker.project
+  return project ? { project } : {}
 }
 
 /** All logical markers the tick loop listens for. */

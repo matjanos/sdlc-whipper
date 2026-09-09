@@ -21,6 +21,16 @@ describe("loadDotEnv", () => {
   })
 })
 
+describe("projectScope", () => {
+  it("scopes queries when tracker.project is set and stays empty otherwise", async () => {
+    const { projectScope } = await import("../src/config.js")
+    expect(projectScope({ raw: { tracker: { team: "AXI", project: "SDLC Whipper" } } } as never)).toEqual({
+      project: "SDLC Whipper",
+    })
+    expect(projectScope({ raw: { tracker: { team: "AXI" } } } as never)).toEqual({})
+  })
+})
+
 describe("model classes", () => {
   it("resolves agent model classes to concrete ids", async () => {
     const { loadConfig } = await import("../src/config.js")

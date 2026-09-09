@@ -7,95 +7,110 @@ import { McpToolbox } from "../src/adapters/mcp/client.js"
 
 /**
  * linear-mcp adapter against an in-memory MCP server that mimics the official
- * Linear MCP tool surface. Verifies the adapter's defensive mapping: tool
- * resolution by candidates, argument aliases, tolerant payload extraction.
+ * Linear MCP tool surface (save_issue/get_issue naming, strict argument
+ * validation, flat issue payloads with grouped relations that carry no
+ * state). Verifies the adapter's defensive mapping: tool resolution by
+ * candidates, per-tool argument shapes, tolerant payload extraction, and
+ * relation-state hydration.
  */
 async function makeServer(options: { omitStatuses?: boolean } = {}) {
   const server = new McpServer({ name: "linear-stub", version: "0.0.0" })
   const state: { issues: any[]; comments: Record<string, any[]> } = { issues: [], comments: {} }
 
-  server.tool("list_issue_statuses", { team: z.string().optional() }, async () => ({
+  const find = (id: string) => state.issues.find((i) => i.id === id)
+
+  server.tool("list_issue_statuses", { team: z.string() }, async () => ({
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify([
+          { id: "st_backlog", name: "Backlog", type: "backlog" },
+          { id: "st_progress", name: "In Progress", type: "started" },
+          { id: "st_done", name: "Done", type: "completed" },
+        ]),
+      },
+    ],
+  }))
+  server.tool("list_issue_labels", { team: z.string() }, async () => ({
     content: [
       {
         type: "text",
         text: JSON.stringify({
-          issueStatuses: {
-            nodes: [
-              { id: "st_backlog", name: "Backlog" },
-              { id: "st_progress", name: "In Progress" },
-              { id: "st_done", name: "Done" },
-            ],
-          },
+          labels: [
+            { id: "lbl_sel", name: "sdlc-selected" },
+            { id: "lbl_info", name: "needs-info" },
+          ],
         }),
       },
     ],
   }))
-  server.tool("list_labels", { team: z.string().optional() }, async () => ({
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify({ nodes: [{ id: "lbl_sel", name: "sdlc-selected" }, { id: "lbl_info", name: "needs-info" }] }),
-      },
-    ],
-  }))
-  server.tool("create_issue", { team: z.string(), title: z.string(), description: z.string(), parentId: z.string().optional() }, async (args) => {
-    const issue = {
-      id: `i${state.issues.length + 1}`,
-      identifier: `TST-${state.issues.length + 1}`,
-      title: args.title,
-      description: args.description,
-      state: { name: "Backlog" },
-      labels: { nodes: [] },
-      relations: { nodes: [] },
-      parent: args.parentId ? { identifier: args.parentId } : null,
-    }
-    state.issues.push(issue)
-    return { content: [{ type: "text", text: JSON.stringify({ issue }) }] }
-  })
-  server.tool("get_issue", { issueId: z.string() }, async (args) => {
-    const issue = state.issues.find((i) => i.identifier === args.issueId)
+  server.tool(
+    "save_issue",
+    {
+      id: z.string().optional(),
+      team: z.string().optional(),
+      title: z.string().optional(),
+      description: z.string().optional(),
+      parentId: z.string().optional(),
+      state: z.string().optional(),
+      addLabels: z.array(z.string()).optional(),
+      blockedBy: z.array(z.string()).optional(),
+      blocks: z.array(z.string()).optional(),
+    },
+    async (args) => {
+      if (args.id) {
+        const issue = find(args.id)
+        if (!issue) return { content: [{ type: "text", text: "not found" }], isError: true }
+        if (args.state) issue.status = args.state
+        if (args.addLabels) issue.labels.push(...args.addLabels)
+        if (args.blockedBy) issue.relations.blockedBy.push(...args.blockedBy.map((id: string) => ({ id, title: find(id)?.title ?? "" })))
+        if (args.blocks) for (const id of args.blocks) {
+          const other = find(id)
+          other.relations.blockedBy.push({ id: args.id, title: issue.title })
+          issue.relations.blocks.push({ id, title: other.title })
+        }
+        return { content: [{ type: "text", text: JSON.stringify(issue) }] }
+      }
+      const issue = {
+        id: `TST-${state.issues.length + 1}`,
+        title: args.title,
+        description: args.description,
+        status: "Backlog",
+        labels: [] as string[],
+        relations: { blocks: [], blockedBy: [], relatedTo: [] },
+        parent: args.parentId ? { identifier: args.parentId } : undefined,
+        parentId: args.parentId,
+        project: null,
+        url: `https://linear.app/test/issue/${`TST-${state.issues.length + 1}`}`,
+      }
+      state.issues.push(issue)
+      return { content: [{ type: "text", text: JSON.stringify(issue) }] }
+    },
+  )
+  server.tool("get_issue", { id: z.string(), includeRelations: z.boolean().optional() }, async (args) => {
+    const issue = find(args.id)
     if (!issue) return { content: [{ type: "text", text: "not found" }], isError: true }
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({ issue: { ...issue, comments: { nodes: state.comments[args.issueId] ?? [] } } }),
-        },
-      ],
-    }
+    const payload: any = { ...issue, comments: undefined }
+    if (args.includeRelations) payload.relations = issue.relations
+    return { content: [{ type: "text", text: JSON.stringify(payload) }] }
   })
-  server.tool("list_issues", { team: z.string().optional() }, async () => ({
-    content: [{ type: "text", text: JSON.stringify({ issues: state.issues }) }],
+  server.tool("list_issues", { team: z.string().optional(), project: z.string().optional(), limit: z.number().optional() }, async () => ({
+    content: [{ type: "text", text: JSON.stringify({ issues: state.issues, hasNextPage: false }) }],
   }))
-  server.tool("create_comment", { issueId: z.string(), body: z.string() }, async (args) => {
-    ;(state.comments[args.issueId] ??= []).push({ id: `c${Date.now()}`, body: args.body, user: { name: "conductor" }, createdAt: "now" })
-    return { content: [{ type: "text", text: JSON.stringify({ success: true }) }] }
-  })
-  server.tool("update_comment", { commentId: z.string(), body: z.string() }, async (args) => {
-    for (const list of Object.values(state.comments)) {
-      const c = list.find((c) => c.id === args.commentId)
-      if (c) c.body = args.body
-    }
-    return { content: [{ type: "text", text: JSON.stringify({ success: true }) }] }
-  })
-  server.tool("list_comments", { issueId: z.string() }, async (args) => ({
+  server.tool("list_comments", { issueId: z.string(), limit: z.number().optional() }, async (args) => ({
     content: [{ type: "text", text: JSON.stringify({ comments: state.comments[args.issueId] ?? [] }) }],
   }))
-  server.tool("add_label", { issueId: z.string(), name: z.string().optional(), labelId: z.string().optional() }, async (args) => {
-    const issue = state.issues.find((i) => i.identifier === args.issueId)
-    const name = args.name ?? (args.labelId === "lbl_sel" ? "sdlc-selected" : args.labelId === "lbl_info" ? "needs-info" : args.labelId)
-    if (issue && name) issue.labels.nodes.push({ name })
+  server.tool("save_comment", { id: z.string().optional(), issueId: z.string().optional(), body: z.string() }, async (args) => {
+    if (args.id) {
+      for (const list of Object.values(state.comments)) {
+        const c = list.find((c) => c.id === args.id)
+        if (c) c.body = args.body
+      }
+      return { content: [{ type: "text", text: JSON.stringify({ success: true }) }] }
+    }
+    ;(state.comments[args.issueId!] ??= []).push({ id: `c${Date.now()}`, body: args.body, user: { name: "conductor" }, createdAt: "now" })
     return { content: [{ type: "text", text: JSON.stringify({ success: true }) }] }
   })
-  server.tool("update_issue", { issueId: z.string(), statusId: z.string().optional(), labelIds: z.array(z.string()).optional(), labels: z.array(z.string()).optional() }, async (args) => {
-    const issue = state.issues.find((i) => i.identifier === args.issueId)
-    if (issue && args.statusId) issue.state = { name: args.statusId === "st_progress" ? "In Progress" : args.statusId === "st_done" ? "Done" : "Backlog" }
-    if (issue && args.labels) issue.labels.nodes.push(...args.labels.map((name) => ({ name })))
-    return { content: [{ type: "text", text: JSON.stringify({ success: true }) }] }
-  })
-  server.tool("create_issue_relation", { issueId: z.string(), relatedIssueId: z.string(), type: z.string() }, async () => ({
-    content: [{ type: "text", text: JSON.stringify({ success: true }) }],
-  }))
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   await server.connect(serverTransport)
@@ -123,7 +138,7 @@ describe("linear-mcp adapter", () => {
     expect(created.state).toBe("backlog")
 
     await tracker.moveTo(created.key, "inProgress")
-    expect(state.issues[0]!.state.name).toBe("In Progress")
+    expect(state.issues[0]!.status).toBe("In Progress")
     expect((await tracker.getTicket(created.key)).state).toBe("inProgress")
 
     await tracker.comment(created.key, "hello <!-- t1 -->")
@@ -137,6 +152,33 @@ describe("linear-mcp adapter", () => {
 
     const listed = await tracker.listIssues({ logicalLabel: "selected" })
     expect(listed.map((x) => x.key)).toContain("TST-1")
+  })
+
+  it("hydrates relation states so done blockers stop gating", async () => {
+    const { clientTransport } = await makeServer()
+    const tracker = new LinearMcpTracker({ team: "TST", map: MAP, transport: clientTransport })
+
+    const a = await tracker.createIssue({ title: "Blocker", description: "first" })
+    const b = await tracker.createIssue({ title: "Blocked", description: "second" })
+    await tracker.setRelation(b.key, "blocked-by", a.key)
+
+    // while the blocker is open, the relation state reflects a non-done state
+    let ticket = await tracker.getTicket(b.key)
+    expect(ticket.relations).toContainEqual(expect.objectContaining({ kind: "blocked-by", key: a.key, state: "backlog" }))
+
+    await tracker.moveTo(a.key, "done")
+    ticket = await tracker.getTicket(b.key)
+    expect(ticket.relations).toContainEqual(expect.objectContaining({ kind: "blocked-by", key: a.key, state: "done" }))
+  })
+
+  it("sub-issues carry parent and project scope", async () => {
+    const { clientTransport, state } = await makeServer()
+    const tracker = new LinearMcpTracker({ team: "TST", project: "SDLC Whipper", map: MAP, transport: clientTransport })
+
+    const parent = await tracker.createIssue({ title: "Parent", description: "p" })
+    const child = await tracker.createSubIssue(parent.key, { title: "Child", description: "c" })
+    expect(child.parentKey).toBe(parent.key)
+    expect(state.issues[1]!.parentId).toBe(parent.key)
   })
 
   it("fails loudly when a mapped state is missing from the workspace", async () => {
