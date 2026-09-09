@@ -3,6 +3,7 @@ import type { Artifacts } from "./artifacts.js"
 import type { Budget } from "./budget.js"
 import type { Logger } from "../util/log.js"
 import type { Ticket } from "../types.js"
+import type { RunEventLog } from "./run-events.js"
 import type {
   AgentRuntime,
   CodeHost,
@@ -32,6 +33,8 @@ export interface TaskContext {
   deps: ConductorDeps
   /** Identifies this delivery in the ledger/budget. */
   runId: string
+  /** Local append-only execution timeline; absent only in isolated phase tests. */
+  events?: RunEventLog
 }
 
 /** Results keyed by phase name, threaded through the pipeline. */

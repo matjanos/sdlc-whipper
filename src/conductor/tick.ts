@@ -9,6 +9,7 @@ import { runBatchPhase, runDeliveryPipeline } from "./pipelines.js"
 import { ensureWorktree } from "../git/worktrees.js"
 import type { RunState, RunStatus, Ticket } from "../types.js"
 import { withTickLock } from "../util/lock.js"
+import { RunEventLog } from "./run-events.js"
 
 export interface TickCandidateResult {
   key: string
@@ -163,22 +164,28 @@ export async function deliverTask(deps: ConductorDeps, ticket: Ticket): Promise<
   const runId = `run_${ticket.key}_${new Date().toISOString().replace(/[:.]/g, "-")}`
   const log = deps.log.child(ticket.key)
   const artifacts = new Artifacts(path.join(deps.config.artifactsDir, ticket.key))
+  const events = new RunEventLog(path.join(deps.config.artifactsDir, ticket.key), runId, ticket.key)
+  events.append({ level: "info", phase: "tick", text: "delivery started" })
   let worktree: string | undefined
   try {
     worktree = await ensureWorktree(deps.config, ticket.key)
+    events.append({ level: "info", phase: "tick", text: "worktree ready" })
   } catch (err) {
     log.error(`worktree setup failed: ${(err as Error).message}`)
+    events.append({ level: "error", phase: "tick", text: `worktree setup failed: ${(err as Error).message}` })
     return "failed"
   }
-  const task = { ticket, worktree, artifacts, deps, runId }
+  const task = { ticket, worktree, artifacts, deps, runId, events }
   await moveTo(deps, ticket.key, "inProgress")
 
   try {
     await deps.runtime.open({ runId, ticket: ticket.key, worktree })
+    events.append({ level: "info", phase: "tick", text: "runtime ready" })
   } catch (err) {
     // Runtime setup failures (bad model config, unreachable server) must land
     // on the ticket, not kill the whole tick — later candidates still deliver.
     log.error(`runtime setup failed: ${(err as Error).message}`)
+    events.append({ level: "error", phase: "tick", text: `runtime setup failed: ${(err as Error).message}` })
     await escalate(deps, ticket.key, "phase-error", `Runtime setup failed:\n\n\`\`\`\n${(err as Error).message}\n\`\`\``)
     return "failed"
   }
@@ -198,10 +205,12 @@ export async function deliverTask(deps: ConductorDeps, ticket: Ticket): Promise<
     const publish = outcomes["publish"] as { skipped?: boolean } | undefined
     await moveTo(deps, ticket.key, "inReview")
     log.info(`${deps.dryRun ? "practice route complete" : "delivered"}${publish?.skipped ? " (stub run — no PR opened)" : ""}`)
+    events.append({ level: "info", phase: phaseReached, text: publish?.skipped ? "delivered (publish skipped)" : "delivered" })
   } else {
     // escalated / parked / failed: stay In Progress; the escalation comment on
     // the ticket tells the human why. They decide the next move.
     log.warn(`run ended: ${status} at ${phaseReached}`)
+    events.append({ level: status === "failed" ? "error" : "warn", phase: phaseReached, text: `run ${status}` })
   }
 
   const runState: RunState = {

@@ -8,6 +8,7 @@ import type { RunState } from "../types.js"
 import { classifyCandidate } from "./tick.js"
 import type { ConductorDeps } from "./deps.js"
 import type { TrackerMirror } from "./tracker-mirror.js"
+import { readRunEvents, type RunEvent } from "./run-events.js"
 
 /**
  * One read-only snapshot of the whole SDLC process, assembled from the same
@@ -61,6 +62,8 @@ export interface CockpitSnapshot {
     total: { tokens: number; costUsd: number }
   }
   activity: { ts: string; text: string }[]
+  /** Bounded local execution timeline; no prompts or model output. */
+  events: RunEvent[]
 }
 
 export interface SnapshotDeps {
@@ -142,6 +145,16 @@ export async function buildSnapshot(deps: SnapshotDeps, mirror: TrackerMirror): 
   }
   runs.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))
 
+  // --- detailed execution timeline (local JSONL, no tracker calls) ------------
+  const events: RunEvent[] = []
+  if (existsSync(config.artifactsDir)) {
+    for (const key of readdirSync(config.artifactsDir)) {
+      events.push(...readRunEvents(path.join(config.artifactsDir, key, "events.jsonl"), 120))
+    }
+  }
+  events.sort((a, b) => a.ts.localeCompare(b.ts))
+  if (events.length > 300) events.splice(0, events.length - 300)
+
   // --- budget ----------------------------------------------------------------
   const byTicket = await ledger.rollup("ticket")
   const byPhase = await ledger.rollup("phase")
@@ -181,6 +194,7 @@ export async function buildSnapshot(deps: SnapshotDeps, mirror: TrackerMirror): 
       total,
     },
     activity,
+    events,
   }
 }
 

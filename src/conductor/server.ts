@@ -88,7 +88,13 @@ export async function createCockpitServer(deps: ConductorDeps, opts: ServeOption
           if (res.writableEnded || res.destroyed) return
           const json = JSON.stringify(snapshot)
           // hash on content that matters — ts changes every poll
-          const hash = JSON.stringify({ c: snapshot.counts, l: snapshot.live, r: snapshot.runs, b: snapshot.budget })
+          const hash = JSON.stringify({
+            c: snapshot.counts,
+            l: snapshot.live,
+            r: snapshot.runs,
+            b: snapshot.budget,
+            e: snapshot.events.at(-1)?.ts,
+          })
           if (hash !== lastHash) {
             lastHash = hash
             res.write(`event: state\ndata: ${json}\n\n`)

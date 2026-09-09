@@ -111,6 +111,15 @@
   .agent .tok{color:var(--faint)}
   .agent .act{margin-left:4px;border:1px solid rgba(229,86,78,.4);color:var(--red);background:none;font-family:var(--mono);font-size:8.5px;padding:2px 6px;cursor:pointer;letter-spacing:.14em}
   .agent .act:hover{background:var(--red);color:var(--ink)}
+  .logtoggle{margin-left:auto;border:0;background:none;color:var(--blue);font-family:var(--mono);font-size:8.5px;letter-spacing:.17em;cursor:pointer;text-transform:uppercase}
+  .logtoggle:hover{color:var(--paper)}
+  .runlog{display:none;margin-top:10px;border-top:1px solid var(--soft);padding-top:8px;max-height:240px;overflow:auto}
+  .runlog.open{display:block}
+  .runlog .ev{display:grid;grid-template-columns:64px 62px 1fr auto;gap:8px;padding:3px 0;font-size:9.5px;color:var(--dim);border-bottom:1px dotted rgba(237,230,211,.06)}
+  .runlog .ev:last-child{border-bottom:0}
+  .runlog .tm{color:var(--faint)} .runlog .ep{color:var(--brass);text-transform:uppercase;letter-spacing:.08em}
+  .runlog .warn .et{color:var(--amber)} .runlog .error .et{color:var(--red)}
+  .runlog .etok{color:var(--faint);white-space:nowrap}
   .empty{padding:26px 14px;color:var(--faint);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;text-align:center}
 
   /* right column */
@@ -225,6 +234,7 @@
 "use strict";
 const $ = id => document.getElementById(id);
 let state = null, selected = null, feed = "poll";
+const openLogs = new Set();
 
 /* ---------- clock ---------- */
 setInterval(() => { $("clock").textContent = new Date().toISOString().slice(11,19) + " UTC" }, 1000);
@@ -423,18 +433,33 @@ function renderFloor(s){
         <span class="tok">${fmtTok(a.tokens.input + a.tokens.output)}</span>
         ${a.running ? `<button class="act" data-sid="${a.id}">STOP</button>` : ""}
       </div>`).join("");
+    const events = (s.events ?? []).filter(e => e.ticket === l.key).slice(-80);
+    const logOpen = openLogs.has(l.key);
+    const eventRows = events.map(e => `<div class="ev ${e.level}">
+      <span class="tm">${e.ts.slice(11,19)}</span>
+      <span class="ep">${e.phase ?? e.role ?? "run"}</span>
+      <span class="et">${e.text}</span>
+      <span class="etok">${e.tokens ? fmtTok(e.tokens)+" tok" : ""}</span>
+    </div>`).join("") || `<div class="empty">no detailed events recorded for this run</div>`;
     return `<div class="lane">
       <div class="lane-head">
         <span class="lane-key">${l.key}</span>
         <span class="lane-title">${l.title}</span>
         <span class="lane-state st-${l.status}">${l.status}</span>
+        <button class="logtoggle" data-log="${l.key}">${logOpen ? "hide log" : `log ${events.length ? `(${events.length})` : ""}`}</button>
       </div>
       <div class="phases">${segs}</div>
       <div class="ph-labels">${labels}</div>
       <div class="agents">${agents}</div>
+      <div class="runlog ${logOpen ? "open" : ""}" data-runlog="${l.key}">${eventRows}</div>
     </div>`;
   }).join("");
   floor.querySelectorAll(".act").forEach(b => b.addEventListener("click", () => act({ type: "interrupt", sessionId: b.dataset.sid }, "session interrupted")));
+  floor.querySelectorAll(".logtoggle").forEach(b => b.addEventListener("click", () => {
+    const key = b.dataset.log;
+    openLogs.has(key) ? openLogs.delete(key) : openLogs.add(key);
+    renderFloor(state);
+  }));
 }
 
 /* ---------- budget ---------- */

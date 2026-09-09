@@ -71,11 +71,13 @@ async function runLLMPhase(
   const role = phase.role
   const model = resolveModel(deps.config, role)?.split("/").pop()
   const label = `${role.startsWith(phase.name) ? phase.name : `${phase.name} · ${role}`}${model ? ` · ${model}` : ""}`
+  task.events?.append({ level: "info", phase: phase.name, role, text: "phase started" })
   spinner.start(`${label} — working`)
   deps.runtime.activityFeed?.((info) => {
     if (info.role !== role) return
     const tokens = info.tokens ? ` · ${formatTokens(info.tokens)} tok` : ""
     spinner.update(`${label} — ${info.text}${tokens}`)
+    task.events?.append({ level: "debug", phase: phase.name, role, text: info.text, tokens: info.tokens })
   })
 
   const prompt = (text: Parameters<typeof deps.runtime.prompt>[1]) =>
@@ -98,6 +100,7 @@ async function runLLMPhase(
       // correction carries no new context — firewall stays intact.
       if (!(err instanceof VerdictParseError)) throw err
       deps.log.warn(`${phase.name}: verdict unparsable — one corrective re-ask`)
+      task.events?.append({ level: "warn", phase: phase.name, role, text: "verdict unparsable — corrective re-ask" })
       await deps.budget.assert(task.runId)
       output = await prompt({ text: VERDICT_CORRECTION })
       retried = true
@@ -108,6 +111,12 @@ async function runLLMPhase(
     deps.log.info(
       `${phase.name}: ok${opts.fresh ? " (fresh)" : ""}${retried ? " (verdict retried)" : ""} (${formatElapsed(Date.now() - startedAt)})`,
     )
+    task.events?.append({
+      level: "info",
+      phase: phase.name,
+      role,
+      text: `phase completed${retried ? " (verdict retried)" : ""} in ${formatElapsed(Date.now() - startedAt)}`,
+    })
     if (phase.onResult) await phase.onResult(task, result, outcomes)
   } finally {
     spinner.stop()
@@ -124,6 +133,7 @@ async function runPurePhase(
   const result = await phase.run(task, outcomes)
   outcomes[phase.name] = result
   deps.log.info(`${phase.name}: ok`)
+  task.events?.append({ level: "info", phase: phase.name, text: "phase completed" })
   if (phase.onResult) await phase.onResult(task, result, outcomes)
 }
 
@@ -139,12 +149,14 @@ export async function runDeliveryPipeline(
   for (const step of DELIVERY_PIPELINE) {
     if (!phaseEnabled(deps, step.phase)) {
       deps.log.info(`${step.phase}: disabled in config — skipping`)
+      task.events?.append({ level: "info", phase: step.phase, text: "disabled — skipped" })
       continue
     }
     const phase = phases.get(step.phase)
     if (!phase) throw new Error(`pipeline references unknown phase "${step.phase}"`)
     if (step.when && !step.when(outcomes)) {
       deps.log.info(`${step.phase}: condition not met — skipping`)
+      task.events?.append({ level: "info", phase: step.phase, text: "condition not met — skipped" })
       continue
     }
     phaseReached = step.phase
@@ -183,6 +195,11 @@ export async function runDeliveryPipeline(
             )
           }
           deps.log.warn(`review round ${round}/${maxRounds}: changes requested — going back to executor`)
+          task.events?.append({
+            level: "warn",
+            phase: step.phase,
+            text: `review round ${round}/${maxRounds}: changes requested — returning to executor`,
+          })
           // re-run the partner (executor) in its existing session with findings
           await runLLMPhase(deps, task, partner, outcomes)
         }
@@ -208,17 +225,20 @@ async function handlePhaseError(
     // user-initiated stop: sessions were interrupted, lock released — do not
     // post escalations or retry against a world the user asked to stop.
     deps.log.warn(`${phase}: interrupted by user — stopping without escalation`)
+    task.events?.append({ level: "warn", phase, text: "interrupted by user" })
     return "failed"
   }
   if (err instanceof EscalationError) {
     await escalate(deps, task.ticket.key, err.tag, err.body)
     deps.log.warn(`${phase}: escalated [${err.tag}]`)
+    task.events?.append({ level: "warn", phase, text: `escalated: ${err.tag}` })
     return err.tag === "needs-info" ? "escalated" : "parked"
   }
   if (err instanceof BudgetExceededError) {
     await deps.runtime.interruptAll()
     await escalate(deps, task.ticket.key, "budget-exceeded", err.message)
     deps.log.warn(`${phase}: budget exceeded — parked`)
+    task.events?.append({ level: "warn", phase, text: `budget exceeded — parked: ${err.message}` })
     return "parked"
   }
   if (err instanceof ModelCallFailedError && /rate.?limit|usage limit|429/i.test(err.message)) {
@@ -232,6 +252,7 @@ async function handlePhaseError(
       `${err.message}\n\nThe conductor does not retry automatically. Wait for the provider window to reset, then run another tick (or \`sdlc deliver ${task.ticket.key}\`).`,
     )
     deps.log.warn(`${phase}: provider rate limit — parked`)
+    task.events?.append({ level: "warn", phase, text: "provider rate limit — parked" })
     return "parked"
   }
   const detail =
@@ -240,6 +261,7 @@ async function handlePhaseError(
       : describeError(err)
   await escalate(deps, task.ticket.key, "phase-error", `Phase **${phase}** failed:\n\n\`\`\`\n${detail}\n\`\`\``)
   deps.log.error(`${phase}: failed — ${describeError(err)}`)
+  task.events?.append({ level: "error", phase, text: `phase failed: ${detail}` })
   return "failed"
 }
 

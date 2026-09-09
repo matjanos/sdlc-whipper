@@ -2,6 +2,8 @@ import { afterAll, describe, expect, it } from "vitest"
 import type { Server } from "node:http"
 import { createCockpitServer } from "../src/conductor/server.js"
 import { makeTempRepo, ticket, wireFakes } from "./helpers.js"
+import { RunEventLog } from "../src/conductor/run-events.js"
+import path from "node:path"
 
 const servers: Server[] = []
 
@@ -28,6 +30,12 @@ describe("cockpit server", () => {
         relations: [{ kind: "blocked-by", key: "TST-1", state: "backlog" }],
       }),
     ])
+    new RunEventLog(path.join(config.artifactsDir, "TST-1"), "run-1", "TST-1").append({
+      level: "info",
+      phase: "execute",
+      role: "executor",
+      text: "phase started",
+    })
     const port = await start(deps)
     const res = await fetch(`http://127.0.0.1:${port}/api/state`)
     expect(res.status).toBe(200)
@@ -36,8 +44,10 @@ describe("cockpit server", () => {
       tickets: { key: string; ready: boolean; blockedBy: string[] }[]
       budget: { total: { tokens: number } }
       live: { serviceUp: boolean; sessions: unknown[] }
+      events: { ticket: string; phase?: string; text: string }[]
     }
     expect(snap.counts["readyNow"]).toBe(1)
+    expect(snap.events).toContainEqual(expect.objectContaining({ ticket: "TST-1", phase: "execute", text: "phase started" }))
     expect(snap.counts["blocked"]).toBe(1)
     const t2 = snap.tickets.find((t) => t.key === "TST-2")
     expect(t2?.blockedBy).toEqual(["TST-1"])
