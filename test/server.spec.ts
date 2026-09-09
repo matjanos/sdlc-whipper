@@ -1,9 +1,10 @@
 import { afterAll, describe, expect, it } from "vitest"
 import type { Server } from "node:http"
-import { createCockpitServer } from "../src/conductor/server.js"
-import { makeTempRepo, ticket, wireFakes } from "./helpers.js"
-import { RunEventLog } from "../src/conductor/run-events.js"
 import path from "node:path"
+import { createCockpitServer } from "../src/conductor/server.js"
+import { TrackerMirror } from "../src/conductor/tracker-mirror.js"
+import { RunEventLog } from "../src/conductor/run-events.js"
+import { makeTempRepo, ticket, wireFakes } from "./helpers.js"
 
 const servers: Server[] = []
 
@@ -36,6 +37,13 @@ describe("cockpit server", () => {
       role: "executor",
       text: "phase started",
     })
+    // seed the mirror cache exactly as a previous serve run would have left it
+    await new TrackerMirror(
+      deps.tracker,
+      path.join(config.whipperDir, "tracker-cache.json"),
+      deps.log,
+      { maxAgeMs: 60_000, minSpacingMs: 1 },
+    ).refreshIfDue()
     const port = await start(deps)
     const res = await fetch(`http://127.0.0.1:${port}/api/state`)
     expect(res.status).toBe(200)

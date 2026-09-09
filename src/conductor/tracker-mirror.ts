@@ -15,7 +15,9 @@ import type { Logger } from "../util/log.js"
  * last known board instantly instead of re-spending tracker quota on boot.
  *
  * Refresh policy (all bounds in code, never in an LLM's judgement):
- * - serve local data when it is younger than `maxAgeMs`
+ * - reads answer instantly from local state — stale-while-revalidate, never
+ *   blocking on the tracker
+ * - a sweep runs in the background when data is older than `maxAgeMs`
  * - rebuild at most once per `minSpacingMs`; rebuilds are single-flight
  * - after a failed sweep, back off exponentially; a tracker-declared
  *   `retryAfter` is honored (capped) — a throttled tracker is a closed gate,
@@ -110,28 +112,31 @@ export class TrackerMirror {
   }
 
   /**
-   * Local tickets, refreshed under the policy. `force` bypasses freshness
-   * (but never single-flight or backoff). Throws only when there is no local
-   * data to serve and the sweep failed.
+   * Local tickets, answered immediately from local state
+   * (stale-while-revalidate). When data is stale or absent, a bounded sweep
+   * runs in the background; the next read — or SSE push — picks it up.
+   * `force` awaits the sweep instead of racing it, but never bypasses
+   * tracker backoff: a throttled tracker is a closed gate. Never throws —
+   * sweep failures surface via degraded().
    */
   async tickets(force = false): Promise<Ticket[]> {
     const t = this.now()
-    const stale = this.dirty || this.ticketsCache.length === 0 || t - this.fetchedAt > this.maxAge()
-    if (force || (stale && t >= this.rebuildNotBefore && t - this.lastSweepAt >= this.minSpacing())) {
-      this.inflight ??= this.sweep().finally(() => {
+    const stale = this.dirty || t - this.fetchedAt > this.maxAge()
+    if (!this.inflight && (force || stale) && t >= this.rebuildNotBefore && t - this.lastSweepAt >= this.minSpacing()) {
+      const sweep = this.sweep()
+      this.inflight = sweep.finally(() => {
         this.inflight = undefined
       })
-      await this.inflight
     }
-    if (this.ticketsCache.length === 0 && this.lastError) {
-      throw new Error(`tracker mirror has no data and the last sweep failed: ${this.lastError}`)
-    }
+    if (force && this.inflight) await this.inflight
     return this.ticketsCache
   }
 
   /** Why local data may be out of date, for surfacing in the cockpit. */
   degraded(): string | undefined {
-    return this.lastError
+    if (this.failures > 0 && this.lastError) return this.lastError
+    if (this.fetchedAt === 0) return "waiting for first tracker sync…"
+    return undefined
   }
 
   /** A write went through the port — next read should reconcile. */

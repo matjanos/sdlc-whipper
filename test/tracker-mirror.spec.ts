@@ -76,55 +76,81 @@ describe("backoff policy", () => {
 })
 
 describe("tracker mirror", () => {
-  it("serves local data when fresh and sweeps again when stale", async () => {
+  it("answers instantly from local state and syncs stale data in the background", async () => {
     const tracker = stubTracker([ticket("TST-1")])
     const { mirror, advance } = makeMirror(tracker)
 
+    await mirror.refreshIfDue() // first sweep, awaited explicitly
     expect(await mirror.tickets()).toHaveLength(1)
+    expect(tracker.fetches).toBe(5)
     expect(await mirror.tickets()).toHaveLength(1)
-    expect(tracker.fetches).toBe(5) // one sweep
+    expect(tracker.fetches).toBe(5) // fresh: no sweep
 
     advance(61_000)
+    expect(await mirror.tickets()).toHaveLength(1) // stale-while-revalidate: served immediately
+    await mirror.refreshIfDue() // single-flight: joins the background sweep already in motion
+    expect(tracker.fetches).toBe(10) // exactly one extra sweep — not one per read
     expect(await mirror.tickets()).toHaveLength(1)
-    expect(tracker.fetches).toBe(10) // second sweep
   })
 
   it("honors tracker retry hints instead of hammering", async () => {
     const tracker = stubTracker([ticket("TST-1")], { failBefore: 1 })
     const { mirror, advance } = makeMirror(tracker)
 
-    await expect(mirror.tickets()).rejects.toThrow(/Retry after 3600 seconds/)
+    await mirror.refreshIfDue() // sweep fails; refreshIfDue never throws
+    expect(await mirror.tickets()).toEqual([])
+    expect(mirror.degraded()).toMatch(/Retry after 3600 seconds/)
     const callsAfterFirst = tracker.fetches
+
     advance(9_000) // declared 3600s, capped by makeMirror to 10s — still inside the window
-    await expect(mirror.tickets()).rejects.toThrow()
+    await mirror.refreshIfDue()
     expect(tracker.fetches).toBe(callsAfterFirst) // backoff holds: no new sweep
+    expect(mirror.degraded()).toBeTruthy()
 
     advance(2_000) // window elapsed → retry (this stub now succeeds)
+    await mirror.refreshIfDue()
     expect(await mirror.tickets()).toHaveLength(1)
+    expect(mirror.degraded()).toBeUndefined()
   })
 
   it("serves stale data with a degraded note when sweeps start failing", async () => {
     const tracker = stubTracker([ticket("TST-1")], { failAfter: 5 }) // first sweep ok, then throttled
     const { mirror, advance } = makeMirror(tracker)
-    await mirror.tickets()
-
-    advance(61_000) // stale → sweep fails → serve what we have
+    await mirror.refreshIfDue()
     expect(await mirror.tickets()).toHaveLength(1)
+
+    advance(61_000) // stale → read serves the last good board instantly
+    expect(await mirror.tickets()).toHaveLength(1)
+    await mirror.refreshIfDue() // sweep fails against the throttle (single-flight with the background one)
+    expect(tracker.fetches).toBeGreaterThan(5) // a failed sweep was attempted
+    expect(await mirror.tickets()).toHaveLength(1) // still the last good data, never an error
     expect(mirror.degraded()).toMatch(/Retry after 3600 seconds/)
-    expect(mirror.degraded()).toBeTruthy()
   })
 
-  it("collapses concurrent reads into one sweep", async () => {
+  it("collapses concurrent forced refreshes into one sweep", async () => {
     let release!: () => void
     const gate = new Promise<void>((r) => { release = r })
     const tracker = stubTracker([ticket("TST-1")], { gate: async (i) => { if (i === 1) await gate } })
     const { mirror } = makeMirror(tracker, { minSpacingMs: 0 })
 
-    const p1 = mirror.tickets()
-    const p2 = mirror.tickets()
+    const p1 = mirror.refreshIfDue()
+    const p2 = mirror.refreshIfDue()
     release()
     await Promise.all([p1, p2])
     expect(tracker.fetches).toBe(5)
+  })
+
+  it("reports syncing state before the first sweep lands", async () => {
+    let release!: () => void
+    const gate = new Promise<void>((r) => { release = r })
+    const tracker = stubTracker([ticket("TST-1")], { gate: async (i) => { if (i === 1) await gate } })
+    const { mirror } = makeMirror(tracker, { minSpacingMs: 0 })
+
+    expect(await mirror.tickets()).toEqual([]) // cold start: instant answer, no blocking
+    expect(mirror.degraded()).toMatch(/waiting for first tracker sync/)
+    release()
+    await mirror.refreshIfDue()
+    expect(mirror.degraded()).toBeUndefined()
   })
 
   it("persists across restarts: a fresh mirror serves without spending a sweep", async () => {
@@ -134,7 +160,7 @@ describe("tracker mirror", () => {
     let t = 1_000_000
     const now = () => t
     const first = new TrackerMirror(tracker, file, log, { maxAgeMs: 60_000, minSpacingMs: 1, now })
-    await first.tickets()
+    await first.refreshIfDue()
     t += 1_000
 
     const coldTracker = stubTracker([])
@@ -146,11 +172,12 @@ describe("tracker mirror", () => {
   it("reconciles after a local change even while fresh", async () => {
     const tracker = stubTracker([ticket("TST-1")])
     const { mirror } = makeMirror(tracker, { minSpacingMs: 0 })
-    await mirror.tickets()
+    await mirror.refreshIfDue()
     expect(tracker.fetches).toBe(5)
 
     mirror.noteLocalChange()
-    await mirror.tickets()
+    await mirror.tickets() // returns immediately from local state…
+    await mirror.refreshIfDue() // …and the sync lands
     expect(tracker.fetches).toBe(10)
   })
 })

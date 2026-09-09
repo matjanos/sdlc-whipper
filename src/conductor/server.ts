@@ -38,6 +38,9 @@ export async function createCockpitServer(deps: ConductorDeps, opts: ServeOption
   )
   const warmer = setInterval(() => void mirror.refreshIfDue(), 5_000)
   warmer.unref?.()
+  // start the first sweep now, so first paint reads local state immediately
+  // and the tracker sync lands underneath it
+  void mirror.refreshIfDue()
 
   const server = createServer((req, res) => {
     void handle(req, res).catch((err) => {
