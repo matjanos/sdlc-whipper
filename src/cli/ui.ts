@@ -20,49 +20,6 @@ const faint = (text: string, color: boolean): string => esc(90, text, color)
 
 const BRAND = (color: boolean): string => `${magenta("🐎", color)} ${bold("WHIPPER", color)}  ${cyan("♞", color)}`
 
-export function shouldUseColor(flags: Map<string, string | boolean>): boolean {
-  return Boolean(process.stdout.isTTY && process.env["NO_COLOR"] === undefined && !flags.has("plain"))
-}
-
-export function renderHelp(options: UiOptions = {}): string {
-  const color = options.color ?? false
-  return [
-    `${BRAND(color)}  ${dim("a steady hand for your agent team", color)}`,
-    "",
-    `Each agent works in a focused harness. ${bold("Whipper sets the route, pace, and limits.", color)}`,
-    "Merging always stays human. 🤝",
-    "",
-    bold("👀 SEE THE TEAM", color),
-    `  ${cyan("status", color)}                 🧭 Ready, blocked, waiting, and in-flight work`,
-    `  ${cyan("harness", color)}                🛠️  Inspect each agent's role, model, and step limit`,
-    `  ${cyan("hitch", color)}                  🪢 Verify the team is connected to this project`,
-    `  ${cyan("cockpit", color)}               🎛️  Open the live project cockpit`,
-    `  ${cyan("ledger", color)}                🧾 Cost and token usage by ticket, phase, run, or agent`,
-    "",
-    bold("🚀 MOVE THE TEAM", color),
-    `  ${green("crack", color)}                  ⚡ Crack the whip: reconcile and dispatch the team`,
-    `  ${green("hit", color)} ${dim("<KEY>", color)}              🎯 Target one durable ticket directly`,
-    "",
-    bold("FIRST RIDE", color),
-    `  ${dim("$", color)} whipper init`,
-    `  ${dim("$", color)} whipper status`,
-    `  ${dim("$", color)} whipper crack --dry-run`,
-    `  ${dim("$", color)} whipper hit LIN-123`,
-    "",
-    bold("COMMON OPTIONS", color),
-    "  --config <path>         Use a specific .whipper/config.json",
-    "  --dry-run               Walk the route without outside-world mutations",
-    "  --runtime <name>        Override the configured agent runtime",
-    "  --json                  Machine-readable output (status)",
-    "  --plain                 Disable color and terminal styling",
-    "  --debug                 Include diagnostic detail",
-    "  -h, --help              Show this guide",
-    "  -v, --version           Show the version",
-    "",
-    dim("Compatibility: `sdlc` and `deliver` / `run` / `tick` / `serve` remain supported.", color),
-  ].join("\n")
-}
-
 export function renderStatus(report: StatusReport, options: UiOptions = {}): string {
   const color = options.color ?? false
   const { budget } = report.config

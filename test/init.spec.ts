@@ -26,10 +26,6 @@ async function makeGitDir(): Promise<string> {
   return dir
 }
 
-function flags(...pairs: [string, string | boolean][]): Map<string, string | boolean> {
-  return new Map(pairs)
-}
-
 describe("buildConfig", () => {
   it("round-trips through the zod schema for both adapter sets", async () => {
     for (const fake of [true, false]) {
@@ -54,9 +50,7 @@ describe("buildConfig", () => {
 describe("runInit (non-interactive)", () => {
   it("writes a valid config and honors flags", async () => {
     const dir = await makeGitDir()
-    await runInit(
-      flags(["yes", true], ["team", "LAW"], ["preview-project", "my-app"], ["fake", true], ["config", path.join(dir, ".whipper", "config.json")]),
-    )
+    await runInit({ yes: true, team: "LAW", previewProject: "my-app", fake: true, config: path.join(dir, ".whipper", "config.json") })
     const config = await loadConfig(path.join(dir, ".whipper", "config.json"))
     expect(config.raw.adapters.tracker).toBe("fake")
     expect(config.raw.tracker.team).toBe("LAW")
@@ -65,12 +59,12 @@ describe("runInit (non-interactive)", () => {
 
   it("refuses to overwrite without --force, overwrites with it", async () => {
     const file = path.join((await makeGitDir()), ".whipper", "config.json")
-    const base = flags(["yes", true], ["config", file])
+    const base = { yes: true, config: file }
     await runInit(base)
     const first = JSON.parse(readFileSync(file, "utf8"))
     await expect(runInit(base)).rejects.toThrow(/--force/)
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual(first) // untouched
-    await runInit(flags(["yes", true], ["config", file], ["force", true], ["team", "ENG"]))
+    await runInit({ ...base, force: true, team: "ENG" })
     expect(JSON.parse(readFileSync(file, "utf8")).tracker.team).toBe("ENG")
   })
 })
@@ -87,14 +81,14 @@ describe("applyGitignore", () => {
     expect(applyGitignore(await makeGitDir())).toBe(false)
 
     // end-to-end: a forced re-run must not duplicate the gitignore block
-    await runInit(flags(["yes", true], ["force", true], ["config", path.join(dir, ".whipper", "config.json")]))
+    await runInit({ yes: true, force: true, config: path.join(dir, ".whipper", "config.json") })
     expect(readFileSync(path.join(dir, ".gitignore"), "utf8").match(/\.whipper\/runs\//g)).toHaveLength(1)
   })
 
   it("assists the repo root .gitignore, not the .whipper directory", async () => {
     const dir = await makeGitDir()
     writeFileSync(path.join(dir, ".gitignore"), "")
-    await runInit(flags(["yes", true], ["config", path.join(dir, ".whipper", "config.json")]))
+    await runInit({ yes: true, config: path.join(dir, ".whipper", "config.json") })
     expect(readFileSync(path.join(dir, ".gitignore"), "utf8")).toContain(".whipper/runs/")
     expect(existsSync(path.join(dir, ".whipper", ".gitignore"))).toBe(false)
   })

@@ -1,7 +1,7 @@
 # `whipper init` — default config generator
 
 Date: 2026-09-09
-Status: approved design, revision B (interactive wizard via `@clack/prompts`), pending implementation
+Status: revision C — CLI shell migrated to Clerc (`built-in help/version/dispatch`); init interactive layer unchanged (see "CLI framework decision")
 
 ## Problem
 
@@ -15,7 +15,7 @@ Non-goals: no environment sniffing, no live validation of Linear/Vercel workspac
 
 ## CLI framework decision
 
-`@clack/prompts` is adopted for interactive prompts (text / select / confirm / spinner / intro-outro). It is a prompting toolkit, **not** a command router: top-level dispatch (`status`, `crack`, `hit`, …) stays on the existing tiny argv parser (`src/util/args.ts`), which clack does not replace. `init` is the only command using prompts in this revision; its look is consistent with the existing emoji CLI skin.
+Revision C supersedes the "tiny argv parser stays" decision: the whole CLI shell now runs on **Clerc** (ESM, clack-family), which owns dispatch, aliases, typed flag/parameter parsing, and the **built-in help/version output** (`renderHelp` and `src/util/args.ts` were removed). Commands carry emoji descriptions so the framework-generated help keeps the project's voice; per-command `--help` lists flags and aliases. `@clack/prompts` remains the interactive layer for `init`'s wizard. Aliases map 1:1: `crack`/`run` → `tick`, `hit` → `deliver`, `cockpit` → `serve`, `costs` → `ledger`. Each command loads its own config (`init` needs none); a shared `errorHandler` renders failures through the existing skin and exits non-zero.
 
 ## CLI surface
 

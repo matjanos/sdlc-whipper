@@ -3,7 +3,6 @@ import path from "node:path"
 import * as p from "@clack/prompts"
 import { applyGitignore, buildConfig } from "../init.js"
 import { loadConfig } from "../config.js"
-import { flagBool, flagString } from "../util/args.js"
 
 /**
  * `whipper init` — interactive when a TTY is attached and not opted out via
@@ -11,7 +10,20 @@ import { flagBool, flagString } from "../util/args.js"
  * from the pure core in `src/init.ts`; this file is presentation + fs.
  */
 
-type Flags = Map<string, string | boolean>
+export interface InitFlags {
+  /** Destination file; default `<cwd>/.whipper/config.json`. */
+  config?: string
+  /** Tracker team key. */
+  team?: string
+  /** Preview project name. */
+  previewProject?: string
+  /** All-fakes adapter set. */
+  fake?: boolean
+  /** Overwrite an existing config without asking. */
+  force?: boolean
+  /** Skip all prompts (flags + defaults). */
+  yes?: boolean
+}
 
 /** Unwrap a clack prompt result, turning Ctrl+C/esc into a clean exit. */
 function unwrap<T>(value: T | symbol): T {
@@ -22,14 +34,13 @@ function unwrap<T>(value: T | symbol): T {
   return value as T
 }
 
-export async function runInit(flags: Flags): Promise<void> {
-  const interactive = process.stdout.isTTY === true && !flagBool(flags, "yes")
-  const dest = path.resolve(flagString(flags, "config") ?? path.join(process.cwd(), ".whipper", "config.json"))
-  const force = flagBool(flags, "force")
+export async function runInit(flags: InitFlags): Promise<void> {
+  const interactive = process.stdout.isTTY === true && !flags.yes
+  const dest = path.resolve(flags.config ?? path.join(process.cwd(), ".whipper", "config.json"))
 
-  let team = flagString(flags, "team")
-  let previewProject = flagString(flags, "preview-project")
-  let fake = flagBool(flags, "fake")
+  let team = flags.team
+  let previewProject = flags.previewProject
+  let fake = flags.fake === true
 
   if (interactive) {
     p.intro("🐎 whipper init — saddle up your target repo")
@@ -67,7 +78,7 @@ export async function runInit(flags: Flags): Promise<void> {
   }
 
   const exists = existsSync(dest)
-  if (exists && !force) {
+  if (exists && !flags.force) {
     if (!interactive) {
       throw new Error(`config already exists: ${dest} — pass --force to overwrite`)
     }

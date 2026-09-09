@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 import {
   renderDeliveryResult,
   renderHarnesses,
-  renderHelp,
   renderHitch,
   renderLedger,
   renderRunSummary,
@@ -26,15 +25,6 @@ const report: StatusReport = {
 }
 
 describe("friendly CLI skin", () => {
-  it("makes hit the primary dispatch command and documents compatibility", () => {
-    const help = renderHelp()
-    expect(help).toContain("whipper crack --dry-run")
-    expect(help).toContain("whipper hit LIN-123")
-    expect(help).toContain("deliver` / `run` / `tick` / `serve`")
-    expect(help).toContain("focused harness")
-    expect(help).toContain("Merging always stays human")
-  })
-
   it("turns status into a clear team briefing with a next action", () => {
     const text = renderStatus(report)
     expect(text).toContain("🟢  1  ready at the gate")
