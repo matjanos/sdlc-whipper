@@ -3,3 +3,7 @@ dist/
 .env
 .ledger/
 package-lock.json
+
+# sdlc-whipper
+.whipper/runs/
+.whipper/state.json

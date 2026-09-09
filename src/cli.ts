@@ -46,7 +46,7 @@ const cli = Cli() // built-in help + version plugins
   .command("init", "🐎 saddle up this repo: generate .whipper/config.json", {
     flags: {
       team: { type: String, description: "Tracker team key (e.g. LAW)" },
-      "preview-project": { type: String, description: "Preview project name" },
+      previewProject: { type: String, description: "Preview project name" },
       fake: { type: Boolean, description: "Use the all-fakes adapter set (offline demo)" },
       force: { type: Boolean, description: "Overwrite an existing config" },
       yes: { type: Boolean, description: "Non-interactive: accept flags and defaults" },
@@ -123,8 +123,8 @@ const cli = Cli() // built-in help + version plugins
   })
   .command("tick", "⚡ crack the whip: reconcile and dispatch the team", {
     flags: {
-      "dry-run": { type: Boolean, description: "Walk the route without outside-world mutations" },
-      "no-groom": { type: Boolean, description: "Skip the grooming phase for this run" },
+      dryRun: { type: Boolean, description: "Walk the route without outside-world mutations" },
+      noGroom: { type: Boolean, description: "Skip the grooming phase for this run" },
       runtime: { type: String, description: "Override the configured agent runtime" },
       ...COMMON_FLAGS,
     },
@@ -154,7 +154,7 @@ const cli = Cli() // built-in help + version plugins
   .command("deliver", "🎯 target one durable ticket directly", {
     parameters: ["<key>"],
     flags: {
-      "dry-run": { type: Boolean, description: "Walk the route without outside-world mutations" },
+      dryRun: { type: Boolean, description: "Walk the route without outside-world mutations" },
       runtime: { type: String, description: "Override the configured agent runtime" },
       ...COMMON_FLAGS,
     },

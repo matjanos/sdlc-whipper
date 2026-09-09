@@ -1,0 +1,42 @@
+[
+  {
+    "key": "WHIP-1",
+    "title": "Production-grade phase prompts: groom and split",
+    "description": "## Goal\nReplace the stub-grade groom and split prompts (prompts/phases/groom.md, split.md) with production prompts, as called out in AGENTS.md: prompts are stub-grade by design until M4.\n\n## Scope\nDesign each prompt around its output contract (fenced ```json verdict blocks parsed by extractVerdict/validateVerdict). Groom must classify tickets: ready, needs-info, or blocked, with a human-readable reason and a confidence score low enough to trigger the council when warranted. Split must emit subtask decomposition only for genuinely multi-part work, each subtask independently deliverable and testable. Both prompts must respect the context firewall: they never see conductor state, other phases' context, or vendor vocabulary. Reference the existing ticket fixture shape in examples/polish-law/tickets.json for realistic input.\n\n## Acceptance criteria\n1. Verdict fixtures for each phase cover: happy path, low confidence (council escalation), malformed JSON (VerdictParseError path), and empty input.\n2. test/verdict.spec.ts extended with cases derived from the new prompt contracts; all pass offline.\n3. Firewall test still passes: groom/split inputs are assembled only in their input() functions.\n4. Each prompt documents its inputs, output contract, and failure modes in a header comment.\n5. pnpm test and pnpm typecheck pass.\n\n## Out of scope\nExecute/review/test prompts (WHIP-2), runtime changes, new phases.",
+    "comments": [],
+    "labels": ["selected"],
+    "state": "backlog",
+    "relations": [],
+    "projectName": "sdlc-whipper"
+  },
+  {
+    "key": "WHIP-2",
+    "title": "Production-grade phase prompts: execute, review, test",
+    "description": "## Goal\nReplace the stub execute, review, and test prompts with production prompts that make the conductor's bounded loops genuinely useful (M4, part 2).\n\n## Scope\nExecute: worktree-aware implementation prompt that reads the ticket and plan artifacts only, and emits a structured completion verdict. Review: fresh-context review (never sees plan/council/execution context — firewall) emitting findings with severity and a verdict that the executor-review loop can act on within budget.maxLoopRounds. Test: acceptance-criteria-driven test authoring prompt producing runnable tests. All three must keep the executor-review loop bounded and escalate stalemates to the ticket, as enforced in conductor code.\n\n## Acceptance criteria\n1. Loop integration tests (test/loop.spec.ts) extended: converge on round 2 with the new prompt contracts; stalemate escalates after maxLoopRounds.\n2. Firewall test extended to cover the review phase's isolation.\n3. Verdict fixtures cover low-confidence review, malformed verdicts, and empty output.\n4. pnpm test and pnpm typecheck pass.\n\n## Out of scope\nGroom/split prompts (WHIP-1), budget changes, runtime changes.",
+    "comments": [],
+    "labels": ["selected"],
+    "state": "backlog",
+    "relations": [{ "kind": "blocked-by", "key": "WHIP-1", "state": "backlog" }],
+    "projectName": "sdlc-whipper"
+  },
+  {
+    "key": "WHIP-3",
+    "title": "whipper doctor: one-shot preflight for adapters and keys",
+    "description": "## Goal\nAdd `whipper doctor` — a read-only preflight that tells a new user exactly what is missing before any run, because right now misconfiguration only surfaces as runtime errors deep in a crack.\n\n## Scope\nCheck and report, with ✅/❌ per item: config discovery and round-trip load; tracker adapter reachability (discoverWorkspace for linear/linear-mcp; note when fake); codehost adapter (gh auth status for github); model classes resolvable via resolveModel against the runtime catalog; ledger directory writable; worktrees directory usable (git worktree add/remove dry). Doctor never mutates the tracker, never opens PRs, and works fully offline with fake adapters. JSON output mode via --json.\n\n## Acceptance criteria\n1. whipper doctor in an all-fake repo with a valid config exits 0 and lists every check as ✅ or n/a (fake).\n2. Missing LINEAR_API_KEY with the linear adapter produces a precise, actionable ❌ line including the .env.example hint.\n3. Unknown model class in agents.*.model is reported with the exact agent role and class name.\n4. Exit code is 1 when any required check fails, 0 otherwise; --json emits machine-readable results.\n5. Help entry appears in the CLI (whipper doctor --help) and README documents it in the FIRST RIDE section.\n6. pnpm test covers doctor's report building as a pure function; typecheck passes.\n\n## Out of scope\nVercel/preview checks, fixing detected problems, interactive repair.",
+    "comments": [],
+    "labels": ["selected"],
+    "state": "backlog",
+    "relations": [],
+    "projectName": "sdlc-whipper"
+  },
+  {
+    "key": "WHIP-4",
+    "title": "Close M3: real target-repo PR published by the conductor",
+    "description": "## Goal\nAGENTS.md is explicit: a real deployed target-repo PR is still required to close M3. Run the conductor against a real throwaway target repo and land a real PR end to end.\n\n## Scope\nPrerequisites: gh auth login, a real model key in opencode user config, a scratch target repo with .whipper/config.json (linear or fake tracker, github codehost, opencode runtime). Run whipper crack on one ticket; let the publish phase open the PR; observe the GitHub checks and (if configured) the Vercel preview observation loop. Record the run in the ledger and capture the PR URL as evidence. File any adapter-shape drift discovered during the run as follow-up tickets instead of expanding this one.\n\n## Acceptance criteria\n1. A real PR exists on the target repo, opened by the conductor, containing only the executor's intended change (scratch-dir hygiene holds: no .opencode/, .whipper/ files committed).\n2. The ledger (whipper ledger) shows the run's per-phase model usage.\n3. If preview config is present, the await-preview phase observed a real deployment or recorded a precise reason it could not.\n4. README 'For real' walkthrough is verified against this run and corrected where it drifted.\n5. Any discovered drift is captured as new tickets with repro steps.\n\n## Out of scope\nNew features in the conductor; prompt work (WHIP-1/WHIP-2).",
+    "comments": [],
+    "labels": ["selected"],
+    "state": "backlog",
+    "relations": [{ "kind": "blocked-by", "key": "WHIP-2", "state": "backlog" }],
+    "projectName": "sdlc-whipper"
+  }
+]

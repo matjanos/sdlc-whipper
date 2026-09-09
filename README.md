@@ -61,6 +61,19 @@ pnpm whipper status --config <repo>/.whipper/config.json
 
 For a concrete six-ticket offline backlog and sibling test app, see [the Polish-law test request](examples/polish-law/README.md).
 
+### Developing whipper with whipper (dogfooding)
+
+Whipper runs on its own backlog. `.whipper/config.json` (fake adapters) and the backlog are committed; point `SDL_FAKE_TICKETS` at it via `.env`:
+
+```sh
+cp /dev/null .env && echo "SDL_FAKE_TICKETS=$PWD/backlog/whipper-tickets.json" >> .env
+pnpm whipper status        # WHIP-* tickets: ready, blocked, next move
+pnpm whipper crack --dry-run
+```
+
+Real milestones live in `backlog/whipper-tickets.json` (M4 prompts, `whipper doctor`, closing M3). To go live, switch the adapters in `.whipper/config.json` and fill `.env` per `.env.example`.
+
+
 1. **Target repo**: run `pnpm whipper init` in it (or copy [`examples/sdlc.config.json`](examples/sdlc.config.json) to `<repo>/.whipper/config.json`), set `tracker.team`, `preview.project`, and the models. Gitignore `.whipper/runs/`, `.whipper/state.json`, `.ledger/`, and your worktrees directory (`init` offers to do this).
 2. **Auth**: `LINEAR_API_KEY` (graph adapter) or `LINEAR_MCP_TOKEN` (MCP adapter) · `gh auth login` · model-provider keys live in your opencode user config (the embedded SDK host reuses them).
 3. **Observe first**: `pnpm whipper status` — read-only, shows every candidate, blocker, and the recommended next move.
