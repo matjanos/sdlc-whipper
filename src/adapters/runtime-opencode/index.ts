@@ -116,14 +116,27 @@ export class OpenCodeRuntime implements AgentRuntime {
     this.sessions.clear()
     this.roleBySession.clear()
     this.closed = false
-    // Agent definitions must exist wherever the session runs — worktree or
-    // not. opencode v2 resolves the agent's own model ahead of the session
-    // model, so a missing definition silently routes to the service default
-    // (a tool-use-less endpoint). Batch phases (grooming) have no worktree;
-    // they still get the conductor's pinned agents in their run directory.
-    writeWorktreeAgentConfig(this.opts.config, this.directory())
+    this.ensureAgentConfig()
     await this.ensureHost()
     await this.preflightModels()
+  }
+
+  /**
+   * Agent definitions must exist wherever the session runs — worktree or
+   * not. opencode v2 resolves the agent's own model ahead of the session
+   * model, so a missing definition makes switchAgent fail outright
+   * (AgentNotFoundError) or silently routes to the service default (a
+   * tool-use-less endpoint). Batch phases (grooming) never call open(),
+   * so this is invoked lazily from prompt() as well. Idempotent per
+   * directory.
+   */
+  private agentConfigFor: string | undefined
+
+  private ensureAgentConfig(): void {
+    const dir = this.directory()
+    if (this.agentConfigFor === dir) return
+    writeWorktreeAgentConfig(this.opts.config, dir)
+    this.agentConfigFor = dir
   }
 
   /**
@@ -176,6 +189,7 @@ export class OpenCodeRuntime implements AgentRuntime {
 
   async prompt(role: AgentRole, parts: PromptParts, opts?: PromptOptions): Promise<string> {
     const host = await this.ensureHost()
+    this.ensureAgentConfig()
     const sessionID = await this.sessionFor(role, opts?.fresh === true)
     await host.sessions.switchAgent({ sessionID, agent: agentId(role) })
     // Agent-config model fields are not reliably applied to new sessions —
