@@ -18,6 +18,26 @@ export interface ModelProblem {
   detail: string
 }
 
+/** Parse `provider/id[#variant]` from a concrete model ref. */
+export function parseModelRef(ref: string): ModelRef {
+  const slash = ref.indexOf("/")
+  if (slash <= 0) throw new Error(`opencode runtime: model ref "${ref}" must be provider/id`)
+  const [providerID, rest] = [ref.slice(0, slash), ref.slice(slash + 1)]
+  const hash = rest.indexOf("#")
+  return hash > 0
+    ? { providerID, id: rest.slice(0, hash), variant: rest.slice(hash + 1) }
+    : { providerID, id: rest }
+}
+
+/** Tolerant `GET <service>/api/model` extraction — unwrap client envelopes ({data:[...]}) and tolerate already-array responses. */
+export async function fetchCatalog(serviceUrl: string, headers?: Record<string, string>): Promise<CatalogEntry[]> {
+  const res = await fetch(`${serviceUrl}/api/model`, { headers })
+  if (!res.ok) throw new Error(`GET /api/model → ${res.status}`)
+  const raw: unknown = await res.json()
+  const list = (raw as Record<string, unknown>)?.data ?? raw
+  return Array.isArray(list) ? (list as CatalogEntry[]) : []
+}
+
 /**
  * Validate role→model refs against the live server's catalog (`GET /api/model`,
  * entries `{ providerID, id, variants }`). Unknown models are accepted by

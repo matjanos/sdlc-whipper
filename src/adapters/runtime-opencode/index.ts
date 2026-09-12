@@ -3,7 +3,7 @@ import type { AgentRole, PromptParts } from "../../types.js"
 import { ModelCallFailedError } from "../../types.js"
 import { resolveModel } from "../../config.js"
 import { writeWorktreeAgentConfig, agentId } from "./agents.js"
-import { invalidModelRefs, type CatalogEntry } from "./models.js"
+import { fetchCatalog, invalidModelRefs, parseModelRef, type CatalogEntry, type ModelRef } from "./models.js"
 import { usageEntryFromEvent } from "./usage.js"
 import { ActivityTracker } from "./activity.js"
 import { isTransient } from "../../conductor/retry.js"
@@ -136,7 +136,7 @@ export class OpenCodeRuntime implements AgentRuntime {
     if (refs.length === 0) return
     let catalog: CatalogEntry[]
     try {
-      catalog = await this.fetchModelCatalog()
+      catalog = await liveModelCatalog()
     } catch {
       return // cannot validate without the catalog — never block a delivery on it
     }
@@ -147,15 +147,6 @@ export class OpenCodeRuntime implements AgentRuntime {
           problems.map((p) => `  ${p.role}: ${p.ref} — ${p.detail}`).join("\n"),
       )
     }
-  }
-
-  private async fetchModelCatalog(): Promise<CatalogEntry[]> {
-    if (!this.serviceUrl) throw new Error("service endpoint unknown")
-    const res = await fetch(`${this.serviceUrl}/api/model`, { headers: this.serviceHeaders })
-    if (!res.ok) throw new Error(`GET /api/model → ${res.status}`)
-    const raw: unknown = await res.json()
-    const list = (raw as Record<string, unknown>)?.data ?? raw
-    return Array.isArray(list) ? (list as CatalogEntry[]) : []
   }
 
   private async sessionFor(role: AgentRole, fresh: boolean): Promise<string> {
@@ -172,16 +163,10 @@ export class OpenCodeRuntime implements AgentRuntime {
   }
 
   /** Parse `provider/id[#variant]` from config. */
-  private modelRef(role: AgentRole): { providerID: string; id: string; variant?: string } | undefined {
+  private modelRef(role: AgentRole): ModelRef | undefined {
     const ref = resolveModel(this.opts.config, role)
     if (!ref) return undefined
-    const slash = ref.indexOf("/")
-    if (slash <= 0) throw new Error(`opencode runtime: model ref "${ref}" must be provider/id`)
-    const [providerID, rest] = [ref.slice(0, slash), ref.slice(slash + 1)]
-    const hash = rest.indexOf("#")
-    return hash > 0
-      ? { providerID, id: rest.slice(0, hash), variant: rest.slice(hash + 1) }
-      : { providerID, id: rest }
+    return parseModelRef(ref)
   }
 
   async prompt(role: AgentRole, parts: PromptParts, opts?: PromptOptions): Promise<string> {
@@ -348,6 +333,19 @@ export class OpenCodeRuntime implements AgentRuntime {
       // event stream ended or host closed — nothing to do
     }
   }
+}
+
+/**
+ * Live model catalog without instantiating a runtime session — `Service.ensure()`
+ * reuses (or starts) the shared background service, then `GET /api/model` is read
+ * tolerantly. Used by runtime preflight and by `whipper doctor`.
+ */
+export async function liveModelCatalog(): Promise<CatalogEntry[]> {
+  const { Service } = (await import("@opencode-ai/client/service")) as unknown as {
+    Service: { ensure(): Promise<{ url: string }>; headers(endpoint: { url: string }): Record<string, string> | undefined }
+  }
+  const endpoint = await Service.ensure()
+  return fetchCatalog(endpoint.url, Service.headers(endpoint))
 }
 
 /** Unwrap client envelopes ({data:[...]}) and tolerate already-array responses. */

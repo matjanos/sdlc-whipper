@@ -10,3 +10,4 @@ package-lock.json
 .playwright-mcp/
 .whipper/tick.lock
 .whipper/tracker-cache.json
+.opencode/
