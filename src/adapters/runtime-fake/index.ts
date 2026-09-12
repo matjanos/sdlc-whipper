@@ -21,7 +21,7 @@ const DEFAULTS: Record<AgentRole, string> = {
   reviewer: '```json\n{"verdict": "approve", "findings": []}\n```',
   tester: '```json\n{"pass": true, "evidence": "Stub test run against the preview URL."}\n```',
   groomer:
-    '```json\n{"selected": [], "relations": [], "splits": [], "questions": []}\n```',
+    '```json\n{"selected": [], "classifications": [], "relations": [], "splits": [], "questions": []}\n```',
 }
 
 /**

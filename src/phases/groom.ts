@@ -22,15 +22,28 @@ export const groomPhase = definePhase<GroomResult>({
     if (!backlog?.length) throw new Error("groom: empty backlog snapshot")
     const selectedName = selectorFor(_task.deps.config, "selected").name
     const listing = backlog
-      .map(
-        (t) =>
-          `- ${t.key} [${t.state}${t.labels.includes(selectedName) ? "|selected" : ""}]: ${t.title}\n  ${truncate(t.description || "(no description)", 600)}`,
-      )
+      .map((t) => {
+        const lines = [
+          `- ${t.key} [${t.state}${t.labels.includes(selectedName) ? "|selected" : ""}]: ${t.title}`,
+          `  ${truncate(t.description || "(no description)", 600)}`,
+        ]
+        if (t.relations.length) {
+          lines.push(`  relations: ${t.relations.map((r) => `${r.kind} ${r.key} (${r.state})`).join(", ")}`)
+        }
+        if (t.comments.length) {
+          lines.push("  comments (latest last — earlier needs-info answers live here):")
+          for (const c of t.comments.slice(-3)) {
+            lines.push(`  - ${c.author} (${c.createdAt}): ${truncate(c.body, 300)}`)
+          }
+        }
+        return lines.join("\n")
+      })
       .join("\n")
     return { text: renderPrompt("groom", { backlog: listing, count: String(backlog.length) }) }
   },
   parse: async (output) => validateVerdict("groom", output, groomResultSchema),
   onResult: async (task, result) => {
+    task.artifacts.setJSON("groom.json", result)
     for (const key of result.selected) await addLabel(task.deps, key, "selected")
     for (const rel of result.relations) await setRelation(task.deps, rel.from, rel.kind, rel.to)
     for (const split of result.splits) {
