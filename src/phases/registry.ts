@@ -21,6 +21,7 @@ export type {
   AwaitPreviewResult,
   TestResult,
   GroomResult,
+  GroomClassification,
 } from "./base.js"
 export {
   splitResultSchema,

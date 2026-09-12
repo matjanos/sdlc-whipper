@@ -27,16 +27,56 @@ export function definePhase<R>(phase: Phase<R>): Phase<R> {
   return phase
 }
 
+export interface SplitSubtask {
+  title: string
+  description: string
+  acceptanceTest: string
+  testPath: string
+}
 export interface SplitResult {
   acceptanceTest: string
   testPath: string
   brief: string
+  /** Only for genuinely multi-part work — each part independently deliverable + testable. */
+  subtasks?: SplitSubtask[]
+  /** Escape hatch: set (with a reason) when no deterministic acceptance check can exist. */
+  unverifiable?: string
 }
-export const splitResultSchema = z.object({
-  acceptanceTest: z.string().min(1),
-  testPath: z.string().min(1),
-  brief: z.string(),
-})
+export const splitResultSchema = z
+  .object({
+    acceptanceTest: z.string(),
+    testPath: z.string(),
+    brief: z.string(),
+    subtasks: z
+      .array(
+        z.object({
+          title: z.string().min(1),
+          description: z.string().min(1),
+          acceptanceTest: z.string().min(1),
+          testPath: z.string().min(1),
+        }),
+      )
+      .min(2, "a one-item subtasks array is not a decomposition — minimum is 2")
+      .optional(),
+    unverifiable: z.string().min(1).optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.unverifiable !== undefined) return
+    if (!val.acceptanceTest.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["acceptanceTest"],
+        message: "required unless unverifiable explains why no deterministic check can be defined",
+      })
+    }
+    if (!val.testPath.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["testPath"],
+        message: "required unless unverifiable explains why no deterministic check can be defined",
+      })
+    }
+  })
 
 export interface ResearchResult {
   confidence: "low" | "high"
@@ -101,30 +141,79 @@ export const testResultSchema = z.object({
   evidence: z.string(),
 })
 
+export interface GroomClassification {
+  key: string
+  status: "ready" | "needs-info" | "blocked"
+  /** One human-readable sentence: why this ticket got this status. */
+  reason: string
+  /** 0.0–1.0 — how sure the groomer is that this ticket can be delivered autonomously as written. */
+  confidence: number
+}
+/** A ticket may only be selected when its classification is "ready" with confidence ≥ this. Enforced in the schema. */
+export const GROOM_SELECT_MIN_CONFIDENCE = 0.7
+
 export interface GroomResult {
   selected: string[]
+  classifications: GroomClassification[]
   relations: { from: string; to: string; kind: "blocks" | "blocked-by" | "relates" }[]
   splits: { parentKey: string; drafts: { title: string; description: string }[] }[]
   questions: { key: string; body: string }[]
 }
-export const groomResultSchema = z.object({
-  selected: z.array(z.string()).default([]),
-  relations: z
-    .array(
+export const groomResultSchema = z
+  .object({
+    selected: z.array(z.string()).default([]),
+    classifications: z.array(
       z.object({
-        from: z.string(),
-        to: z.string(),
-        kind: z.enum(["blocks", "blocked-by", "relates"]),
+        key: z.string().min(1),
+        status: z.enum(["ready", "needs-info", "blocked"]),
+        reason: z.string().min(1),
+        confidence: z.number().min(0).max(1),
       }),
-    )
-    .default([]),
-  splits: z
-    .array(
-      z.object({
-        parentKey: z.string(),
-        drafts: z.array(z.object({ title: z.string(), description: z.string() })).min(1),
-      }),
-    )
-    .default([]),
-  questions: z.array(z.object({ key: z.string(), body: z.string() })).default([]),
-})
+    ),
+    relations: z
+      .array(
+        z.object({
+          from: z.string(),
+          to: z.string(),
+          kind: z.enum(["blocks", "blocked-by", "relates"]),
+        }),
+      )
+      .default([]),
+    splits: z
+      .array(
+        z.object({
+          parentKey: z.string(),
+          drafts: z.array(z.object({ title: z.string(), description: z.string() })).min(1),
+        }),
+      )
+      .default([]),
+    questions: z.array(z.object({ key: z.string(), body: z.string() })).default([]),
+  })
+  .superRefine((val, ctx) => {
+    const byKey = new Map(val.classifications.map((c) => [c.key, c]))
+    for (const key of val.selected) {
+      const c = byKey.get(key)
+      if (!c || c.status !== "ready" || c.confidence < GROOM_SELECT_MIN_CONFIDENCE) {
+        const detail = !c
+          ? "no classification exists for it"
+          : c.status !== "ready"
+            ? `its classification is "${c.status}", not "ready"`
+            : `its confidence is ${c.confidence}, below the minimum ${GROOM_SELECT_MIN_CONFIDENCE}`
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["selected", key],
+          message: `${key} cannot be selected — ${detail}; low confidence means ask (needs-info), never select`,
+        })
+      }
+    }
+    const questionKeys = new Set(val.questions.map((q) => q.key))
+    for (const c of val.classifications) {
+      if (c.status === "needs-info" && !questionKeys.has(c.key)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["classifications", c.key],
+          message: `${c.key} is classified needs-info but has no matching entry in questions — every ask must carry the actual questions`,
+        })
+      }
+    }
+  })

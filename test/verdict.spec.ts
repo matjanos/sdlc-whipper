@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { VerdictParseError, extractVerdict } from "../src/phases/shared.js"
-import { deliverTask } from "../src/conductor/tick.js"
+import { deliverTask, runTick } from "../src/conductor/tick.js"
 import { makeTempRepo, ticket, wireFakes } from "./helpers.js"
+import { Artifacts } from "../src/conductor/artifacts.js"
+import { groomResultSchema, loadPhases, splitResultSchema } from "../src/phases/registry.js"
+import type { TaskContext } from "../src/conductor/deps.js"
+import type { Ticket } from "../src/types.js"
 
 const APPROVE = '```json\n{"verdict": "approve", "findings": []}\n```'
 const BARE = '{"verdict": "approve", "findings": []}'
