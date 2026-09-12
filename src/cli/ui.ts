@@ -1,4 +1,5 @@
 import type { StatusReport } from "../conductor/status.js"
+import type { DoctorReport } from "../doctor.js"
 import type { RunStatus } from "../types.js"
 import { formatTokens, stamp } from "../util/format.js"
 
@@ -222,6 +223,27 @@ export function renderLedger(
     lines.push(dim("💳 these models report no metered cost (subscription plan) — treat tokens as the spend", color))
   }
   lines[0] = stamp(lines[0] ?? "", options)
+  return lines.join("\n")
+}
+
+export function renderDoctor(report: DoctorReport, options: UiOptions = {}): string {
+  const color = options.color ?? false
+  const lines = [
+    `${BRAND(color)}  ${report.ok ? green("🩺 PREFLIGHT", color) : red("🩺 PREFLIGHT", color)}`,
+    rule(color),
+  ]
+  for (const check of report.checks) {
+    const icon = check.status === "ok" ? green("✅", color) : check.status === "na" ? dim("○", color) : red("❌", color)
+    lines.push(`${icon} ${bold(check.name, color)} — ${check.detail}`)
+    if (check.hint) lines.push(`   ${dim(`↳ ${check.hint}`, color)}`)
+  }
+  const failed = report.checks.filter((c) => c.status === "fail").length
+  lines.push("")
+  lines.push(
+    report.ok
+      ? green("✅ all clear — the team is hitched and ready to move", color)
+      : red(`❌ ${failed} check${failed === 1 ? "" : "s"} failed — fix above, then re-run whipper doctor`, color),
+  )
   return lines.join("\n")
 }
 
