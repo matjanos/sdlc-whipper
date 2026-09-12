@@ -201,8 +201,8 @@ export async function buildSnapshot(deps: SnapshotDeps, mirror: TrackerMirror): 
 async function readLiveSessions(config: ResolvedConfig): Promise<CockpitSnapshot["live"]> {
   try {
     const [{ OpenCode }, { Service }] = (await Promise.all([
-      import("@opencode-ai/client"),
-      import("@opencode-ai/client/service"),
+      import("@opencode/client"),
+      import("@opencode/client/service"),
     ])) as unknown as [
       { OpenCode: { make(o: { baseUrl: string; headers?: Record<string, string> }): OpencodeClient } },
       { Service: { discover(): Promise<{ url: string } | undefined>; headers(e: { url: string }): Record<string, string> | undefined } },

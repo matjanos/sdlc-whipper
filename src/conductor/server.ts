@@ -178,8 +178,8 @@ async function interruptSessions(deps: ConductorDeps, mirror: TrackerMirror, ses
   const targets = snapshot.live.sessions.filter((s) => (sessionId ? s.id === sessionId : s.running))
   if (!snapshot.live.serviceUp) throw new Error("opencode service not reachable")
   const [{ OpenCode }, { Service }] = (await Promise.all([
-    import("@opencode-ai/client"),
-    import("@opencode-ai/client/service"),
+    import("@opencode/client"),
+    import("@opencode/client/service"),
   ])) as unknown as [
     { OpenCode: { make(o: { baseUrl: string; headers?: Record<string, string> }): import("./snapshot.js").OpencodeClient } },
     { Service: { discover(): Promise<{ url: string } | undefined>; headers(e: { url: string }): Record<string, string> | undefined } },

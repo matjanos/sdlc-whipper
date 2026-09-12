@@ -84,8 +84,8 @@ export class OpenCodeRuntime implements AgentRuntime {
   private async ensureHost(): Promise<SdkHost> {
     if (this.host) return this.host
     const [{ OpenCode }, { Service }] = (await Promise.all([
-      import("@opencode-ai/client"),
-      import("@opencode-ai/client/service"),
+      import("@opencode/client"),
+      import("@opencode/client/service"),
     ])) as unknown as [
       { OpenCode: { make(options: { baseUrl: string; headers?: Record<string, string> }): { session: SdkSessions; event: SdkEvents } } },
       { Service: { ensure(): Promise<{ url: string }>; headers(endpoint: { url: string }): Record<string, string> | undefined } },
@@ -94,13 +94,15 @@ export class OpenCodeRuntime implements AgentRuntime {
     const headers = Service.headers(endpoint)
     this.serviceUrl = endpoint.url
     this.serviceHeaders = headers
-    const client = OpenCode.make({
-      baseUrl: endpoint.url,
-      headers,
-    })
+    // v2 services multiplex event delivery per client: a slow subscriber makes
+    // the shared source wait, which stalls session calls on the same client.
+    // Sessions and events therefore ride separate clients, and consumeEvents
+    // accepts events fast, processing them off the subscription loop.
+    const sessionClient = OpenCode.make({ baseUrl: endpoint.url, headers })
+    const eventClient = OpenCode.make({ baseUrl: endpoint.url, headers })
     this.host = {
-      sessions: client.session,
-      events: client.event,
+      sessions: sessionClient.session,
+      events: eventClient.event,
       // The conductor does not own the shared background service, so it must
       // never stop it when one delivery finishes.
       close: async () => undefined,
@@ -114,9 +116,12 @@ export class OpenCodeRuntime implements AgentRuntime {
     this.sessions.clear()
     this.roleBySession.clear()
     this.closed = false
-    if (run.worktree) {
-      writeWorktreeAgentConfig(this.opts.config, run.worktree)
-    }
+    // Agent definitions must exist wherever the session runs — worktree or
+    // not. opencode v2 resolves the agent's own model ahead of the session
+    // model, so a missing definition silently routes to the service default
+    // (a tool-use-less endpoint). Batch phases (grooming) have no worktree;
+    // they still get the conductor's pinned agents in their run directory.
+    writeWorktreeAgentConfig(this.opts.config, this.directory())
     await this.ensureHost()
     await this.preflightModels()
   }
@@ -312,26 +317,37 @@ export class OpenCodeRuntime implements AgentRuntime {
     const tracker = this.opts.onActivity || this.activityObservers.length > 0
       ? new ActivityTracker({ owned, onActivity: (info) => this.emitActivity(info) })
       : undefined
+    // v2 event sources wait for every subscriber to accept each event — slow
+    // work inside this loop stalls the stream. Accept immediately, process
+    // serially off-loop (ordering preserved: ledger appends stay in sequence).
+    let drain: Promise<void> = Promise.resolve()
     try {
       for await (const raw of host.events.subscribe()) {
         if (this.closed || !this.host) break
         for (const [role, sid] of this.sessions) this.roleBySession.set(sid, role)
-        if (this.opts.ledger) {
-          const entry = usageEntryFromEvent(raw, this.roleBySession, {
-            runId: run.runId,
-            ticket: run.ticket,
-            modelFor: (role) => {
-              const ref = this.modelRef(role)
-              return ref ? `${ref.providerID}/${ref.id}` : undefined
-            },
+        const entry = this.opts.ledger
+          ? usageEntryFromEvent(raw, this.roleBySession, {
+              runId: run.runId,
+              ticket: run.ticket,
+              modelFor: (role) => {
+                const ref = this.modelRef(role)
+                return ref ? `${ref.providerID}/${ref.id}` : undefined
+              },
+            })
+          : undefined
+        const obs = tracker
+        drain = drain
+          .then(async () => {
+            if (this.closed) return
+            if (entry) await this.opts.ledger!.record(entry)
+            obs?.observe(raw)
           })
-          if (entry) await this.opts.ledger.record(entry)
-        }
-        tracker?.observe(raw)
+          .catch(() => undefined)
       }
     } catch {
       // event stream ended or host closed — nothing to do
     }
+    await drain.catch(() => undefined)
   }
 }
 
@@ -341,7 +357,7 @@ export class OpenCodeRuntime implements AgentRuntime {
  * tolerantly. Used by runtime preflight and by `whipper doctor`.
  */
 export async function liveModelCatalog(): Promise<CatalogEntry[]> {
-  const { Service } = (await import("@opencode-ai/client/service")) as unknown as {
+  const { Service } = (await import("@opencode/client/service")) as unknown as {
     Service: { ensure(): Promise<{ url: string }>; headers(endpoint: { url: string }): Record<string, string> | undefined }
   }
   const endpoint = await Service.ensure()

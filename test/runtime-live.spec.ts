@@ -22,7 +22,10 @@ const d = live ? describe : describe.skip
 d("OpenCodeRuntime live smoke", () => {
   it("passes preflight, answers one prompt, and records usage in the ledger", async () => {
     const model = process.env.SDL_LIVE_MODEL ?? "zai-coding-plan/glm-5.3-flash"
-    const { dir, config } = await makeTempRepo({ models: { reasoner: model } })
+    // the agent class must be wired to the model class — an agent without a
+    // resolvable model rides the service default, which v2 routes via
+    // openrouter to tool-use-less endpoints
+    const { dir, config } = await makeTempRepo({ models: { reasoner: model }, agents: { researcher: { model: "reasoner" } } })
     const ledger = new JsonlLedger(`${dir}/.ledger-smoke`)
     const runtime = new OpenCodeRuntime({ config, fallbackDirectory: dir, ledger })
     try {
