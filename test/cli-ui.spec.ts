@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest"
 import {
   renderDeliveryResult,
+  renderDoctor,
   renderHarnesses,
   renderHitch,
   renderLedger,
   renderRunSummary,
   renderStatus,
 } from "../src/cli/ui.js"
+import type { DoctorReport } from "../src/doctor.js"
 import type { StatusReport } from "../src/conductor/status.js"
 
 const report: StatusReport = {
@@ -74,5 +76,29 @@ describe("friendly CLI skin", () => {
     })
     expect(hitch).toContain("project team connected")
     expect(hitch).toContain("whipper status")
+  })
+
+  it("renders the doctor preflight with per-check icons, hints, and footers", () => {
+    const healthy: DoctorReport = {
+      ok: true,
+      checks: [
+        { name: "config", status: "ok", detail: "/repo/.whipper/config.json" },
+        { name: "tracker", status: "na", detail: "n/a — fake tracker (offline demo)" },
+      ],
+    }
+    const clear = renderDoctor(healthy)
+    expect(clear).toContain("🩺 PREFLIGHT")
+    expect(clear).toContain("✅ config")
+    expect(clear).toContain("n/a — fake tracker")
+    expect(clear).toContain("all clear")
+
+    const broken: DoctorReport = {
+      ok: false,
+      checks: [{ name: "tracker", status: "fail", detail: "LINEAR_API_KEY is missing", hint: "keys live in .env.example" }],
+    }
+    const failed = renderDoctor(broken)
+    expect(failed).toContain("❌ tracker — LINEAR_API_KEY is missing")
+    expect(failed).toContain("↳ keys live in .env.example")
+    expect(failed).toContain("1 check failed")
   })
 })

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
-import { afterAll, describe, expect, it } from "vitest"
+import { afterAll, describe, expect, it, vi } from "vitest"
 import { applyGitignore, buildConfig } from "../src/init.js"
 import { runInit } from "../src/cli/init.js"
 import { loadConfig } from "../src/config.js"
@@ -55,6 +55,24 @@ describe("runInit (non-interactive)", () => {
     expect(config.raw.adapters.tracker).toBe("fake")
     expect(config.raw.tracker.team).toBe("LAW")
     expect(config.raw.preview.project).toBe("my-app")
+  })
+
+  it("leads its next-steps line with whipper doctor", async () => {
+    const dir = await makeGitDir()
+    const logs: string[] = []
+    const spy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      logs.push(args.join(" "))
+    })
+    try {
+      await runInit({ yes: true, config: path.join(dir, ".whipper", "config.json") })
+    } finally {
+      spy.mockRestore()
+    }
+    const next = logs.find((line) => line.startsWith("next:"))
+    if (!next) throw new Error("runInit printed no next-steps line")
+    expect(next).toBe("next: whipper doctor → whipper status → whipper crack --dry-run")
+    expect(next.indexOf("whipper doctor")).toBeLessThan(next.indexOf("whipper status"))
+    expect(next.indexOf("whipper status")).toBeLessThan(next.indexOf("whipper crack --dry-run"))
   })
 
   it("refuses to overwrite without --force, overwrites with it", async () => {
