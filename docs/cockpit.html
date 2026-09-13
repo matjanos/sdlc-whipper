@@ -326,7 +326,7 @@ function renderBoard(s){
     const pr = r.prNumber ? `<a href="${ghPrUrl(r.prNumber)}" target="_blank" rel="noreferrer">PR #${r.prNumber}</a>` : "";
     const pv = r.previewUrl ? `<a href="${r.previewUrl}" target="_blank" rel="noreferrer">preview</a>` : "";
     const appr = r.prNumber && r.status !== "delivered"
-      ? `<button class="approve" data-pr="${r.prNumber}">Approve &amp; merge PR #${r.prNumber}</button>` : "";
+      ? `<button class="approve" data-pr="${r.prNumber}">Merge PR #${r.prNumber} (squash)</button>` : "";
     const sess = (sessByTicket.get(r.ticket) ?? []).slice(0, 6).map(a => `
       <div class="sess ${a.running ? "running" : ""}">
         <div class="sr"><i></i><span class="srole">${a.role}</span>
@@ -379,7 +379,7 @@ function renderBoard(s){
   for(const b of board.querySelectorAll(".stop"))
     b.addEventListener("click", () => act({ type: "interrupt", sessionId: b.dataset.sid }, "agent stopped"));
   for(const b of board.querySelectorAll(".approve"))
-    b.addEventListener("click", () => act({ type: "approve", pr: Number(b.dataset.pr) }, `approved PR #${b.dataset.pr}`));
+    b.addEventListener("click", () => act({ type: "merge", pr: Number(b.dataset.pr) }, `merged PR #${b.dataset.pr}`));
   for(const d of board.querySelectorAll(".dlog")){
     const st = scrollState.get(d.dataset.dlog);
     d.scrollTop = !st || st.atBottom ? d.scrollHeight : st.top;   // new drawer opens at the live tail

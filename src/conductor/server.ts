@@ -132,6 +132,14 @@ export async function createCockpitServer(deps: ConductorDeps, opts: ServeOption
           res.end(JSON.stringify({ ok: true }))
           return
         }
+        case "merge": {
+          // The human's merge signature — the conductor never merges on its own.
+          if (!action.pr) throw new Error("merge: pr number required")
+          await deps.codehost.merge(action.pr)
+          res.writeHead(200, { "content-type": "application/json" })
+          res.end(JSON.stringify({ ok: true }))
+          return
+        }
         default:
           res.writeHead(501, { "content-type": "application/json" })
           res.end(
