@@ -58,7 +58,7 @@
     }
   },
   "budget": {
-    "maxParallelDeliveries": 2,
+    "maxParallelDeliveries": 3,
     "perTaskUsd": 3,
     "perTaskTokens": 20000000,
     "maxLoopRounds": 3
