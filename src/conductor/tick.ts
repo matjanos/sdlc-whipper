@@ -162,6 +162,7 @@ const GROOM_TICKET: Ticket = {
 /** Deliver one ticket end-to-end. Never throws. */
 export async function deliverTask(deps: ConductorDeps, ticket: Ticket): Promise<RunStatus> {
   const runId = `run_${ticket.key}_${new Date().toISOString().replace(/[:.]/g, "-")}`
+  const startedAt = new Date().toISOString()
   const log = deps.log.child(ticket.key)
   const artifacts = new Artifacts(path.join(deps.config.artifactsDir, ticket.key))
   const events = new RunEventLog(path.join(deps.config.artifactsDir, ticket.key), runId, ticket.key)
@@ -213,13 +214,17 @@ export async function deliverTask(deps: ConductorDeps, ticket: Ticket): Promise<
     events.append({ level: status === "failed" ? "error" : "warn", phase: phaseReached, text: `run ${status}` })
   }
 
+  const publishOutcome = outcomes["publish"] as { pr?: { number: number } } | undefined
+  const previewOutcome = outcomes["await-preview"] as { url?: string } | undefined
   const runState: RunState = {
     runId,
     ticket: ticket.key,
     status: deps.dryRun ? "dry-run" : status,
-    startedAt: runId,
+    startedAt,
     updatedAt: new Date().toISOString(),
     phaseReached: phaseReached as RunState["phaseReached"],
+    prNumber: publishOutcome?.pr?.number,
+    previewUrl: previewOutcome?.url,
     message: status === "delivered" && (outcomes["publish"] as { skipped?: boolean } | undefined)?.skipped
       ? "stub run — publish skipped (no commits)"
       : undefined,

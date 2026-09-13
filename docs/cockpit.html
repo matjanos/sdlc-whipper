@@ -72,6 +72,9 @@
   .rmeta{display:flex;align-items:center;gap:10px;justify-self:end}
   .pill{font-family:var(--label);font-size:8.5px;font-weight:650;letter-spacing:.2em;text-transform:uppercase;
     padding:3px 8px 2px;border:1px solid var(--line);color:var(--dim)}
+  .prlink{font-size:10.5px;letter-spacing:.04em;color:var(--ink);text-decoration:underline;
+    text-decoration-color:var(--green);text-underline-offset:3px;white-space:nowrap}
+  .prlink:hover{text-decoration-color:var(--green)}
   .pill.run{color:var(--green);border-color:rgba(52,217,123,.45)}
   .pill.park{color:var(--amber);border-color:rgba(232,179,65,.45)}
   .pill.att{color:var(--red);border-color:rgba(229,86,78,.5)}
@@ -323,8 +326,8 @@ function renderBoard(s){
     const frac = Math.min(1, toks / cap);
     const mcls = toks > cap ? "over" : frac > 0.7 ? "warn" : "";
     const open = openRows.has(r.ticket);
-    const pr = r.prNumber ? `<a href="${ghPrUrl(r.prNumber)}" target="_blank" rel="noreferrer">PR #${r.prNumber}</a>` : "";
-    const pv = r.previewUrl ? `<a href="${r.previewUrl}" target="_blank" rel="noreferrer">preview</a>` : "";
+    const pr = r.prNumber ? `<a class="prlink" href="${ghPrUrl(r.prNumber)}" target="_blank" rel="noreferrer">PR #${r.prNumber} ↗</a>` : "";
+    const pv = r.previewUrl ? `<a class="prlink" href="${r.previewUrl}" target="_blank" rel="noreferrer">preview ↗</a>` : "";
     const appr = r.prNumber && r.status !== "delivered"
       ? `<button class="approve" data-pr="${r.prNumber}">Merge PR #${r.prNumber} (squash)</button>` : "";
     const sess = (sessByTicket.get(r.ticket) ?? []).slice(0, 6).map(a => `
@@ -344,6 +347,7 @@ function renderBoard(s){
         <span class="rk">${r.ticket}</span>
         <span class="rt">${esc(r.title ?? "")}</span>
         <span class="rmeta">
+          ${pr}${pv ? " " + pv : ""}
           <span class="pill ${pill}">${label}</span>
           <button class="toggle ${open ? "on" : ""}" data-log="${r.ticket}">log</button>
         </span>
