@@ -154,6 +154,24 @@ describe("linear-mcp adapter", () => {
     expect(listed.map((x) => x.key)).toContain("TST-1")
   })
 
+  it("proposes a gateway-compatible MCP protocol version", async () => {
+    const { clientTransport } = await makeServer()
+    const sent: unknown[] = []
+    const send = clientTransport.send.bind(clientTransport)
+    clientTransport.send = async (message, options) => {
+      sent.push(message)
+      await send(message, options)
+    }
+    const toolbox = new McpToolbox({ url: "http://linear.test/mcp", transport: clientTransport }, "linear-mcp")
+
+    await toolbox.connect()
+
+    expect(sent).toContainEqual(expect.objectContaining({
+      method: "initialize",
+      params: expect.objectContaining({ protocolVersion: "2025-06-18" }),
+    }))
+  })
+
   it("hydrates relation states so done blockers stop gating", async () => {
     const { clientTransport } = await makeServer()
     const tracker = new LinearMcpTracker({ team: "TST", map: MAP, transport: clientTransport })

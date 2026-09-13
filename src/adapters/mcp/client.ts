@@ -3,6 +3,70 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 
 /** Whatever Client.connect accepts — avoids depending on the SDK's internal Transport export path. */
 type TransportLike = Parameters<Client["connect"]>[0]
+type TransportMessage = Parameters<TransportLike["send"]>[0]
+type TransportSendOptions = Parameters<TransportLike["send"]>[1]
+
+/**
+ * The current SDK proposes its newest protocol version (2025-11-25). Some
+ * streamable HTTP gateways reject that proposal rather than negotiate down;
+ * Linear currently reports this as a misleading `invalid_token` error even
+ * when the same API key is valid. Keep the wire version at the newest version
+ * broadly accepted by the gateways we support until they negotiate correctly.
+ */
+class CompatibleProtocolTransport {
+  constructor(
+    private readonly inner: TransportLike,
+    private readonly protocolVersion = "2025-06-18",
+  ) {}
+
+  start(): Promise<void> {
+    return this.inner.start()
+  }
+
+  send(message: TransportMessage, options?: TransportSendOptions): Promise<void> {
+    const request = message as { method?: string; params?: Record<string, unknown> }
+    const compatibleMessage = request.method === "initialize" && request.params
+      ? { ...request, params: { ...request.params, protocolVersion: this.protocolVersion } }
+      : message
+    return this.inner.send(compatibleMessage as TransportMessage, options)
+  }
+
+  close(): Promise<void> {
+    return this.inner.close()
+  }
+
+  get onclose(): TransportLike["onclose"] {
+    return this.inner.onclose
+  }
+
+  set onclose(handler: TransportLike["onclose"]) {
+    this.inner.onclose = handler
+  }
+
+  get onerror(): TransportLike["onerror"] {
+    return this.inner.onerror
+  }
+
+  set onerror(handler: TransportLike["onerror"]) {
+    this.inner.onerror = handler
+  }
+
+  get onmessage(): TransportLike["onmessage"] {
+    return this.inner.onmessage
+  }
+
+  set onmessage(handler: TransportLike["onmessage"]) {
+    this.inner.onmessage = handler
+  }
+
+  get sessionId(): string | undefined {
+    return this.inner.sessionId
+  }
+
+  setProtocolVersion(version: string): void {
+    this.inner.setProtocolVersion?.(version)
+  }
+}
 
 /**
  * Minimal MCP client plumbing shared by MCP-based adapters (linear-mcp,
@@ -32,11 +96,12 @@ export class McpToolbox {
     const headers: Record<string, string> = { ...this.endpoint.headers }
     if (this.endpoint.token) headers["Authorization"] = `Bearer ${this.endpoint.token}`
     const client = new Client({ name: "sdlc-whipper", version: "0.1.0" })
-    const transport =
+    const baseTransport =
       this.endpoint.transport ??
       new StreamableHTTPClientTransport(new URL(this.endpoint.url), {
         requestInit: { headers },
       })
+    const transport = new CompatibleProtocolTransport(baseTransport)
     try {
       await client.connect(transport)
     } catch (err) {
