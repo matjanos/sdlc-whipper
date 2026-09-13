@@ -64,11 +64,15 @@ async function runLLMPhase(
 ): Promise<void> {
   if (!phase.role || !phase.input) throw new Error(`${phase.name}: not an LLM phase`)
   const parts = await phase.input(task, outcomes)
-  await deps.budget.assert(task.runId)
+  const role = phase.role
+  const onWarning = (message: string): void => {
+    deps.log.warn(message)
+    task.events?.append({ level: "warn", phase: phase.name, role, text: message })
+  }
+  await deps.budget.assert(task.runId, { onWarning })
 
   const spinner = createSpinner()
   const startedAt = Date.now()
-  const role = phase.role
   const model = resolveModel(deps.config, role)?.split("/").pop()
   const label = `${role.startsWith(phase.name) ? phase.name : `${phase.name} · ${role}`}${model ? ` · ${model}` : ""}`
   task.events?.append({ level: "info", phase: phase.name, role, text: "phase started" })
@@ -88,7 +92,7 @@ async function runLLMPhase(
       label: `${phase.name}/${phase.role}`,
     })
   try {
-    let output = await prompt(parts)
+    let output = await withBudgetWatchdog(deps, task, onWarning, () => prompt(parts))
     const parse = () => (phase.parse ? phase.parse(output, task) : output)
     let retried = false
     let result
@@ -101,8 +105,8 @@ async function runLLMPhase(
       if (!(err instanceof VerdictParseError)) throw err
       deps.log.warn(`${phase.name}: verdict unparsable — one corrective re-ask`)
       task.events?.append({ level: "warn", phase: phase.name, role, text: "verdict unparsable — corrective re-ask" })
-      await deps.budget.assert(task.runId)
-      output = await prompt({ text: VERDICT_CORRECTION })
+      await deps.budget.assert(task.runId, { onWarning })
+      output = await withBudgetWatchdog(deps, task, onWarning, () => prompt({ text: VERDICT_CORRECTION }))
       retried = true
       result = await parse()
     }
@@ -120,6 +124,43 @@ async function runLLMPhase(
     if (phase.onResult) await phase.onResult(task, result, outcomes)
   } finally {
     spinner.stop()
+  }
+}
+
+/**
+ * Budget watchdog. Asserts between prompts cannot see tokens burned inside a
+ * long one, so while a prompt is in flight a timer re-asserts every
+ * `budget.watchdogMs`. On exceed: interrupt the runtime, then fail the phase
+ * with the budget error — the raced prompt result is dropped and can never
+ * write outcomes after the park. Bounded in conductor code, never in an
+ * LLM's judgement.
+ */
+async function withBudgetWatchdog(
+  deps: ConductorDeps,
+  task: TaskContext,
+  onWarning: (message: string) => void,
+  run: () => Promise<string>,
+): Promise<string> {
+  let exceed: (err: BudgetExceededError) => void = () => undefined
+  const budgetHit = new Promise<never>((_resolve, reject) => {
+    exceed = reject
+  })
+  const timer = setInterval(() => {
+    void deps.budget.assert(task.runId, { onWarning }).catch((err) => {
+      if (!(err instanceof BudgetExceededError)) return // ledger trouble — the next tick re-checks
+      void deps.runtime.interruptAll().catch(() => undefined) // stop the burn now; the park path re-interrupts
+      exceed(err)
+    })
+  }, deps.config.raw.budget.watchdogMs)
+  const pending = run()
+  void pending.catch(() => undefined) // a late failure after a watchdog park must not surface as unhandled
+  try {
+    const output = await Promise.race([pending, budgetHit])
+    // one more assert: usage can land after the last tick, before the prompt resolves
+    await deps.budget.assert(task.runId, { onWarning })
+    return output
+  } finally {
+    clearInterval(timer)
   }
 }
 

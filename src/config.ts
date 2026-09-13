@@ -90,6 +90,8 @@ const schema = z.object({
       perTaskUsd: z.number().positive().default(3),
       perTaskTokens: z.number().int().positive().default(4_000_000),
       maxLoopRounds: z.number().int().positive().default(3),
+      /** How often the budget guard re-asserts while a prompt is in flight. */
+      watchdogMs: z.number().int().positive().default(15_000),
     })
     .default({}),
   phases: z

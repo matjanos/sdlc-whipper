@@ -60,8 +60,11 @@ export class ActivityTracker {
       tracked.label = "composing"
     } else if (type === "session.usage.updated" && data.tokens && typeof data.tokens === "object") {
       const t = data.tokens
-      tracked.tokens +=
-        numberOr(t.input) + numberOr(t.output) + numberOr(t.reasoning) + numberOr(t.cache?.read) + numberOr(t.cache?.write)
+      // snapshots are session-lifetime totals — show the total, never re-add it
+      tracked.tokens = Math.max(
+        tracked.tokens,
+        numberOr(t.input) + numberOr(t.output) + numberOr(t.reasoning) + numberOr(t.cache?.read) + numberOr(t.cache?.write),
+      )
     } else {
       return
     }

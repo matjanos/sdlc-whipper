@@ -76,7 +76,7 @@ export function wireFakes(
   const codehost = new FakeCodeHost()
   const preview = new FakePreview()
   const ledger = new JsonlLedger(config.ledgerDir)
-  const runtime = new FakeRuntime({ script: overrides.runtimeScript, ledger })
+  const runtime = new FakeRuntime({ script: overrides.runtimeScript, ...overrides.fakeRuntime, ledger })
   const deps = createDeps(config, createLogger("error"), {
     ...overrides,
     tracker,

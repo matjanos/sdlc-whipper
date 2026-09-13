@@ -56,6 +56,23 @@ describe("ActivityTracker (deterministic loader text from real events)", () => {
     expect(onActivity).toHaveBeenLastCalledWith({ role: OWNED_ROLE, text: "thinking", tokens: 8774 })
   })
 
+  it("usage snapshots are lifetime totals — a growing snapshot replaces, never re-adds", () => {
+    const onActivity = vi.fn()
+    const t = new ActivityTracker({ owned: (sid) => owned.get(sid), onActivity })
+    t.observe(THINKING)
+    t.observe(USAGE) // 8774 total
+    const grown = {
+      type: "session.usage.updated",
+      data: {
+        sessionID: "ses_owned",
+        cost: 0,
+        tokens: { input: 9008, output: 6, reasoning: 16, cache: { read: 1344 } },
+      },
+    }
+    t.observe(grown)
+    expect(onActivity).toHaveBeenLastCalledWith({ role: OWNED_ROLE, text: "thinking", tokens: 10374 })
+  })
+
   it("never emits for foreign sessions on the server-global stream", () => {
     const onActivity = vi.fn()
     const t = new ActivityTracker({ owned: (sid) => owned.get(sid), onActivity })

@@ -50,6 +50,52 @@ export function readUsageEvent(raw: unknown): UsageEventView | undefined {
   }
 }
 
+/**
+ * opencode reports `session.usage.updated` as absolute session-lifetime totals
+ * (upstream #35781), not per-call deltas — recording each event's total as its
+ * own ledger entry re-adds the whole session spend on every event, so the
+ * budget guard reads multiples of the real cap. The tracker converts
+ * snapshots to per-session deltas so the ledger sums to the session's true
+ * spend. State is keyed by sessionID; reset it when a run's sessions are.
+ */
+export class UsageDeltaTracker {
+  private readonly last = new Map<string, UsageEventView>()
+
+  /** Fresh run → fresh baselines (sessions are never reused across runs). */
+  reset(): void {
+    this.last.clear()
+  }
+
+  /**
+   * Delta of one snapshot against the session's previous one, clamped
+   * component-wise (a counter regression clamps to 0 instead of inventing
+   * negative spend). Returns undefined when nothing new was spent (repeat
+   * snapshot). Cost is deltad like tokens — if a server ever reported
+   * per-event cost instead of cumulative, deltas would under-count; tokens
+   * drive the budget guard.
+   */
+  delta(view: UsageEventView): UsageEventView | undefined {
+    const prev = this.last.get(view.sessionID)
+    this.last.set(view.sessionID, view)
+    const gain = (cur: number, before: number): number => Math.max(0, cur - before)
+    const input = gain(view.input, prev?.input ?? 0)
+    const output = gain(view.output, prev?.output ?? 0)
+    const reasoning = gain(view.reasoning, prev?.reasoning ?? 0)
+    const cacheRead = gain(view.cacheRead, prev?.cacheRead ?? 0)
+    const cacheWrite = gain(view.cacheWrite, prev?.cacheWrite ?? 0)
+    if (input + output + reasoning + cacheRead + cacheWrite === 0) return undefined
+    return {
+      ...view,
+      input,
+      output,
+      reasoning,
+      cacheRead,
+      cacheWrite,
+      cost: view.cost === null ? null : gain(view.cost, prev?.cost ?? 0),
+    }
+  }
+}
+
 /** LLM phase name for an agent role — phases and their primary agents map 1:1. */
 export const ROLE_PHASE: Record<AgentRole, PhaseName> = {
   groomer: "groom",
@@ -74,14 +120,25 @@ export interface UsageRunContext {
  * foreign sessions (the user's own opencode work) must never pollute the
  * ledger. Reasoning tokens are billed as generated output, so they fold into
  * `output` for budget and rollup purposes.
+ *
+ * Pass a `UsageDeltaTracker` when events are cumulative snapshots (the real
+ * server's behavior): the entry then carries only the spend since the
+ * session's previous snapshot. Without one, each event is ledgered whole —
+ * right for genuinely per-call events, and what the single-event fixtures
+ * pin.
  */
 export function usageEntryFromEvent(
   raw: unknown,
   ownedSessions: ReadonlyMap<string, AgentRole>,
   ctx: UsageRunContext,
+  deltas?: UsageDeltaTracker,
 ): LedgerEntry | undefined {
-  const usage = readUsageEvent(raw)
+  let usage = readUsageEvent(raw)
   if (!usage) return undefined
+  if (deltas) {
+    usage = deltas.delta(usage)
+    if (!usage) return undefined
+  }
   const role = ownedSessions.get(usage.sessionID)
   if (!role) return undefined
   return {

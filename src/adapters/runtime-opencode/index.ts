@@ -4,7 +4,7 @@ import { ModelCallFailedError } from "../../types.js"
 import { resolveModel } from "../../config.js"
 import { writeWorktreeAgentConfig, agentId } from "./agents.js"
 import { fetchCatalog, invalidModelRefs, parseModelRef, type CatalogEntry, type ModelRef } from "./models.js"
-import { usageEntryFromEvent } from "./usage.js"
+import { usageEntryFromEvent, UsageDeltaTracker } from "./usage.js"
 import { ActivityTracker } from "./activity.js"
 import { isTransient } from "../../conductor/retry.js"
 import { sleep } from "../../util/exec.js"
@@ -70,6 +70,8 @@ export class OpenCodeRuntime implements AgentRuntime {
   private run?: RunContext
   private readonly sessions = new Map<AgentRole, string>() // role → sessionID
   private readonly roleBySession = new Map<string, AgentRole>() // for usage attribution
+  // server events are cumulative snapshots — ledger deltas, never raw totals
+  private readonly usageDeltas = new UsageDeltaTracker()
   private readonly activityObservers: ((info: AgentActivity) => void)[] = []
   private serviceUrl?: string
   private serviceHeaders?: Record<string, string>
@@ -115,6 +117,7 @@ export class OpenCodeRuntime implements AgentRuntime {
     this.run = run
     this.sessions.clear()
     this.roleBySession.clear()
+    this.usageDeltas.reset()
     this.closed = false
     this.ensureAgentConfig()
     await this.ensureHost()
@@ -340,14 +343,19 @@ export class OpenCodeRuntime implements AgentRuntime {
         if (this.closed || !this.host) break
         for (const [role, sid] of this.sessions) this.roleBySession.set(sid, role)
         const entry = this.opts.ledger
-          ? usageEntryFromEvent(raw, this.roleBySession, {
-              runId: run.runId,
-              ticket: run.ticket,
-              modelFor: (role) => {
-                const ref = this.modelRef(role)
-                return ref ? `${ref.providerID}/${ref.id}` : undefined
+          ? usageEntryFromEvent(
+              raw,
+              this.roleBySession,
+              {
+                runId: run.runId,
+                ticket: run.ticket,
+                modelFor: (role) => {
+                  const ref = this.modelRef(role)
+                  return ref ? `${ref.providerID}/${ref.id}` : undefined
+                },
               },
-            })
+              this.usageDeltas,
+            )
           : undefined
         const obs = tracker
         drain = drain

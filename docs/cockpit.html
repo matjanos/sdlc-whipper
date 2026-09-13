@@ -472,7 +472,7 @@ function renderBudget(s){
      <div class="sub">total · ${fmtTok(s.budget.total.tokens)} tokens<br>caps: $${capUsd} / ${fmtTok(cap)} per task</div>`;
   $("budgetRows").innerHTML = s.budget.byTicket.slice(0, 8).map(r => {
     const frac = Math.min(1, r.tokens / cap);
-    const cls = r.tokens > cap ? "over" : frac > 0.7 ? "warn" : "";
+    const cls = r.tokens > cap ? "over" : frac > 0.8 ? "warn" : "";
     return `<div class="brow"><div class="t"><span>${r.key}</span><span>$${r.costUsd.toFixed(2)} · ${fmtTok(r.tokens)} tok</span></div>
       <div class="bar"><i class="${cls}" style="width:${Math.max(2, frac*100)}%"></i></div></div>`;
   }).join("") || `<div class="empty">ledger empty</div>`;
