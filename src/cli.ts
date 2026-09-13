@@ -9,9 +9,10 @@ import { deliverTask, runTick } from "./conductor/tick.js"
 import { setProgressDisabled } from "./util/progress.js"
 import { installShutdownHandlers, isShuttingDown } from "./util/shutdown.js"
 import { releaseTickLock } from "./util/lock.js"
+import { runDoctor } from "./doctor.js"
 import { runInit } from "./cli/init.js"
 import type { AgentRole } from "./types.js"
-import { renderDeliveryResult, renderDeliveryStart, renderError, renderHarnesses, renderHitch, renderLedger, renderRunStart, renderRunSummary, renderStatus } from "./cli/ui.js"
+import { renderDeliveryResult, renderDeliveryStart, renderDoctor, renderError, renderHarnesses, renderHitch, renderLedger, renderRunStart, renderRunSummary, renderStatus } from "./cli/ui.js"
 
 const VERSION = "0.1.0"
 
@@ -30,13 +31,19 @@ interface CommonFlags {
   debug?: boolean
 }
 
-/** Color/env setup + config load shared by all config-bearing commands. */
-async function commandContext(flags: CommonFlags): Promise<{ color: boolean; debug: boolean; config: ResolvedConfig }> {
+/** Color/env setup shared by every command (safe to run before config load). */
+async function uiContext(flags: CommonFlags): Promise<{ color: boolean; debug: boolean }> {
   loadDotEnv()
   const color = Boolean(process.stdout.isTTY && process.env["NO_COLOR"] === undefined && !flags.plain)
   setProgressDisabled(!color)
+  return { color, debug: Boolean(flags.debug) }
+}
+
+/** Color/env setup + config load shared by all config-bearing commands. */
+async function commandContext(flags: CommonFlags): Promise<{ color: boolean; debug: boolean; config: ResolvedConfig }> {
+  const ui = await uiContext(flags)
   const config = await loadConfig(flags.config)
-  return { color, debug: Boolean(flags.debug), config }
+  return { ...ui, config }
 }
 
 const cli = Cli() // built-in help + version plugins
@@ -91,6 +98,14 @@ const cli = Cli() // built-in help + version plugins
     }
     if (ctx.flags.json) console.log(JSON.stringify(report, null, 2))
     else console.log(renderHitch(report, { color }))
+  })
+  .command("doctor", "🩺 one-shot preflight: adapters, keys, models, ledger, worktrees", { flags: COMMON_FLAGS })
+  .on("doctor", async (ctx) => {
+    const { color } = await uiContext(ctx.flags)
+    const report = await runDoctor({ configPath: ctx.flags.config })
+    if (ctx.flags.json) console.log(JSON.stringify(report, null, 2))
+    else console.log(renderDoctor(report, { color }))
+    process.exitCode = report.ok ? 0 : 1
   })
   .command("serve", "🎛️  open the live project cockpit", {
     flags: { port: { type: Number, description: "Port to listen on", default: 4747 }, ...COMMON_FLAGS },

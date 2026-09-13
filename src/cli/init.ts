@@ -117,7 +117,7 @@ export async function runInit(flags: InitFlags): Promise<void> {
     if (!fake) {
       p.log.info("auth: LINEAR_API_KEY (or LINEAR_MCP_TOKEN) · gh auth login · model keys in your opencode user config")
     }
-    p.outro(`next: whipper status → whipper crack --dry-run`)
+    p.outro(`next: whipper doctor → whipper status → whipper crack --dry-run`)
   } else {
     write()
     await loadConfig(dest)
@@ -128,6 +128,6 @@ export async function runInit(flags: InitFlags): Promise<void> {
     if (!fake) {
       console.log("auth: LINEAR_API_KEY (or LINEAR_MCP_TOKEN) · gh auth login · model keys in your opencode user config")
     }
-    console.log("next: whipper status → whipper crack --dry-run")
+    console.log("next: whipper doctor → whipper status → whipper crack --dry-run")
   }
 }

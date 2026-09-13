@@ -52,6 +52,7 @@ pnpm whipper --help  # meet the friendly CLI
 
 ```sh
 # any throwaway git repo with a .whipper/config.json using the fake adapters
+pnpm whipper doctor --config <repo>/.whipper/config.json   # 🩺 one-shot preflight
 pnpm whipper status --config <repo>/.whipper/config.json
 SDL_FAKE_TICKETS=./demo-tickets.json pnpm whipper crack --config <repo>/.whipper/config.json
 pnpm whipper ledger --config <repo>/.whipper/config.json
@@ -71,9 +72,10 @@ For a concrete six-ticket offline backlog and sibling test app, see [the Polish-
 
 1. **Target repo**: run `pnpm whipper init` in it (or copy [`examples/sdlc.config.json`](examples/sdlc.config.json) to `<repo>/.whipper/config.json`), set `tracker.team`, `preview.project`, and the models. Gitignore `.whipper/runs/`, `.whipper/state.json`, `.ledger/`, and your worktrees directory (`init` offers to do this).
 2. **Auth**: `LINEAR_API_KEY` (graph adapter) or `LINEAR_MCP_TOKEN` (MCP adapter) · `gh auth login` · model-provider keys live in your opencode user config (the embedded SDK host reuses them).
-3. **Observe first**: `pnpm whipper status` — read-only, shows every candidate, blocker, and the recommended next move.
-4. **Practice**: `pnpm whipper crack --dry-run` — full pipeline, zero side effects.
-5. **Go live**: `pnpm whipper crack` (or `whipper hit LIN-123` for one ticket).
+3. **Preflight**: `pnpm whipper doctor` — one shot, verifies keys, adapters, model classes and the live catalog, ledger, and worktrees; exit 0 means the team is hitched.
+4. **Observe first**: `pnpm whipper status` — read-only, shows every candidate, blocker, and the recommended next move.
+5. **Practice**: `pnpm whipper crack --dry-run` — full pipeline, zero side effects.
+6. **Go live**: `pnpm whipper crack` (or `whipper hit LIN-123` for one ticket).
 
 #### Developing whipper with whipper (dogfooding)
 
@@ -94,6 +96,7 @@ Real milestones live in `backlog/whipper-tickets.json` (M4 prompts, `whipper doc
 | `whipper status [--json]` | A read-only team briefing: ready, blocked, waiting, and in-flight |
 | `whipper harness [--json]` | Inspect every agent's role, model class, concrete model, and step limit |
 | `whipper hitch [--json]` | Validate the tracker connection and show the project team wiring |
+| `whipper doctor [--json]` | 🩺 One-shot preflight: config, tracker, code host, model classes/catalog, ledger, worktrees |
 | `whipper crack [--dry-run] [--runtime fake] [--no-groom]` | Signal the team: scan the backlog and dispatch ready tickets |
 | `whipper hit <KEY>` | Target one durable ticket directly |
 | `whipper cockpit [--port 4747]` | Serve the live project cockpit |
