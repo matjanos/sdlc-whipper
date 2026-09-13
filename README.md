@@ -66,7 +66,7 @@ pnpm whipper hitch --config <repo>/.whipper/config.json
 pnpm whipper status --config <repo>/.whipper/config.json
 ```
 
-#### For real (against your repo + Linear + GitHub + Vercel)
+#### First ride — for real (against your repo + Linear + GitHub + Vercel)
 
 For a concrete six-ticket offline backlog and sibling test app, see [the Polish-law test request](examples/polish-law/README.md).
 
