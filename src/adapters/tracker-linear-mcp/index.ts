@@ -2,7 +2,7 @@ import type { IssueQuery, TicketTracker } from "../../ports/index.js"
 import { parseSelector, type Selector } from "../../config.js"
 import type { LogicalState, Ticket, TicketDraft, TrackerComment, WorkspaceMap } from "../../types.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
-import { McpToolbox } from "../mcp/client.js"
+import { isInvalidTokenError, McpToolbox } from "../mcp/client.js"
 
 export interface LinearMcpOptions {
   team: string
@@ -19,6 +19,7 @@ export interface LinearMcpOptions {
 
 /** Upper bound on relation-state lookups per ticket, so a relation-heavy ticket cannot blow up a tick. */
 const MAX_RELATION_LOOKUPS = 20
+const READ_PURPOSES = new Set(["list statuses", "list labels", "list issues", "get issue", "list comments"])
 
 /**
  * Linear adapter speaking MCP instead of GraphQL. Same TicketTracker contract
@@ -65,7 +66,16 @@ export class LinearMcpTracker implements TicketTracker {
           `add an entry to the candidates map (known: ${Object.keys(argsByName).join(", ")})`,
       )
     }
-    return this.tb.callJson<unknown>(name, args)
+    try {
+      return await this.tb.callJson<unknown>(name, args)
+    } catch (err) {
+      // Retry only read-side requests, once, after resetting the HTTP client.
+      // A duplicate write could create a second comment/issue, so writes must
+      // remain exactly-once from the conductor's perspective.
+      if (!READ_PURPOSES.has(purpose) || !isInvalidTokenError(err)) throw err
+      await this.tb.close().catch(() => undefined)
+      return this.tb.callJson<unknown>(name, args)
+    }
   }
 
   private async tool(purpose: string, candidates: string[]): Promise<string> {

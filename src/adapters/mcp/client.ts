@@ -113,8 +113,19 @@ export class McpToolbox {
   private async names(): Promise<Set<string>> {
     await this.connect()
     if (!this.namesCache) {
-      const res = await this.client!.listTools()
-      this.namesCache = new Set(res.tools.map((t) => t.name))
+      try {
+        const res = await this.client!.listTools()
+        this.namesCache = new Set(res.tools.map((t) => t.name))
+      } catch (err) {
+        // Tool listing is read-only. A handful of MCP gateways intermittently
+        // reject an otherwise valid API key; reconnect once before reporting
+        // the error. Mutating calls deliberately never get this retry.
+        if (!isInvalidTokenError(err)) throw err
+        await this.close().catch(() => undefined)
+        await this.connect()
+        const res = await this.client!.listTools()
+        this.namesCache = new Set(res.tools.map((t) => t.name))
+      }
     }
     return this.namesCache
   }
@@ -162,7 +173,12 @@ export class McpToolbox {
   }
 
   async close(): Promise<void> {
-    await this.client?.close()
+    const client = this.client
     this.client = undefined
+    await client?.close()
   }
+}
+
+export function isInvalidTokenError(err: unknown): boolean {
+  return err instanceof Error && err.message.includes("invalid_token")
 }
