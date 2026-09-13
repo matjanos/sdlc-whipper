@@ -297,6 +297,11 @@ const STATUS = {
 const ORDER = { inflight:0, parked:1, escalated:1, failed:1, "dry-run":2, delivered:3 };
 function renderBoard(s){
   const board = $("board");
+  // preserve each open drawer's scroll intent across re-renders: at-bottom
+  // means "follow the live tail", anything else means "hold my place"
+  const scrollState = new Map();
+  for(const d of board.querySelectorAll(".dlog"))
+    scrollState.set(d.dataset.dlog, { top: d.scrollTop, atBottom: d.scrollTop + d.clientHeight >= d.scrollHeight - 40 });
   const rows = [...s.runs].sort((a,b) =>
     (ORDER[a.status] ?? 4) - (ORDER[b.status] ?? 4) || (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
   if(!rows.length){ board.innerHTML = `<div class="plain">no deliveries yet — run “sdlc tick”</div>`; return; }
@@ -375,18 +380,15 @@ function renderBoard(s){
     b.addEventListener("click", () => act({ type: "interrupt", sessionId: b.dataset.sid }, "agent stopped"));
   for(const b of board.querySelectorAll(".approve"))
     b.addEventListener("click", () => act({ type: "approve", pr: Number(b.dataset.pr) }, `approved PR #${b.dataset.pr}`));
-  scrollDrawers(board);
+  for(const d of board.querySelectorAll(".dlog")){
+    const st = scrollState.get(d.dataset.dlog);
+    d.scrollTop = !st || st.atBottom ? d.scrollHeight : st.top;   // new drawer opens at the live tail
+  }
 }
 function phaseStartTs(s, r){
   const cur = norm(r.phaseReached);
   const evs = (s.events ?? []).filter(e => e.ticket === r.ticket && (e.phase ?? "") === cur);
   return evs.length ? evs[evs.length-1].ts : (r.updatedAt ?? r.startedAt);
-}
-function scrollDrawers(board){
-  for(const d of board.querySelectorAll(".dlog")){
-    if(d.dataset.stick !== "y" && d.scrollTop + d.clientHeight < d.scrollHeight - 60) continue;
-    d.dataset.stick = "y"; d.scrollTop = d.scrollHeight;
-  }
 }
 function tickElapsed(){
   for(const el of document.querySelectorAll("[data-since]"))
