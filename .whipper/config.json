@@ -60,7 +60,7 @@
   "budget": {
     "maxParallelDeliveries": 3,
     "perTaskUsd": 3,
-    "perTaskTokens": 20000000,
+    "perTaskTokens": 100000000,
     "maxLoopRounds": 3
   },
   "phases": {
