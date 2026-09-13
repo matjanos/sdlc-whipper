@@ -2,6 +2,8 @@ import type { ResolvedConfig } from "../config.js"
 import type { ConductorDeps } from "../conductor/deps.js"
 import { Budget } from "../conductor/budget.js"
 import type { Logger } from "../util/log.js"
+import { mkdirSync } from "node:fs"
+import path from "node:path"
 import { JsonlLedger } from "./ledger-jsonl/index.js"
 import { LinearTracker } from "./tracker-linear/index.js"
 import { LinearMcpTracker } from "./tracker-linear-mcp/index.js"
@@ -84,10 +86,18 @@ export function createDeps(config: ResolvedConfig, log: Logger, overrides: DepsO
   const ledger = overrides.ledger ?? new JsonlLedger(config.ledgerDir)
 
   const runtimeMode = overrides.runtime ?? raw.adapters.runtime
+  // v2 services cache a directory's config from the first time they see it.
+  // Batch phases (grooming) have no worktree and used to session in the repo
+  // root — a directory the service saw before .opencode existed — so their
+  // agents were never found. A fresh directory per tick forces a fresh read;
+  // the groomer needs no repo access (its snapshot is injected, edits denied).
+  const batchSessionDir = mkdirSync(path.join(config.whipperDir, "runs", `batch-${Date.now().toString(36)}`), {
+    recursive: true,
+  })
   const runtime: AgentRuntime =
     overrides.runtimeInstance ??
     (runtimeMode === "opencode"
-      ? new OpenCodeRuntime({ config, fallbackDirectory: config.repoRoot, ledger })
+      ? new OpenCodeRuntime({ config, fallbackDirectory: batchSessionDir, ledger })
       : runtimeMode === "fake"
         ? new FakeRuntime({ ...overrides.fakeRuntime, ledger })
         : new NoRuntime())

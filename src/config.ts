@@ -87,7 +87,7 @@ const schema = z.object({
   budget: z
     .object({
       maxParallelDeliveries: z.number().int().positive().default(2),
-      perTaskUsd: z.number().positive().default(15),
+      perTaskUsd: z.number().positive().default(3),
       perTaskTokens: z.number().int().positive().default(4_000_000),
       maxLoopRounds: z.number().int().positive().default(3),
     })
