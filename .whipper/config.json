@@ -1,6 +1,6 @@
 {
   "adapters": {
-    "tracker": "linear-mcp",
+    "tracker": "linear",
     "codehost": "github",
     "preview": "fake",
     "runtime": "opencode"

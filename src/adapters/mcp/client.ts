@@ -95,19 +95,32 @@ export class McpToolbox {
     if (this.client) return
     const headers: Record<string, string> = { ...this.endpoint.headers }
     if (this.endpoint.token) headers["Authorization"] = `Bearer ${this.endpoint.token}`
-    const client = new Client({ name: "sdlc-whipper", version: "0.1.0" })
-    const baseTransport =
-      this.endpoint.transport ??
-      new StreamableHTTPClientTransport(new URL(this.endpoint.url), {
-        requestInit: { headers },
-      })
-    const transport = new CompatibleProtocolTransport(baseTransport)
-    try {
+    const connectClient = async (): Promise<void> => {
+      const client = new Client({ name: "sdlc-whipper", version: "0.1.0" })
+      const baseTransport =
+        this.endpoint.transport ??
+        new StreamableHTTPClientTransport(new URL(this.endpoint.url), {
+          requestInit: { headers },
+        })
+      const transport = new CompatibleProtocolTransport(baseTransport)
       await client.connect(transport)
-    } catch (err) {
-      throw new Error(`${this.label}: cannot connect to MCP server ${this.endpoint.url} — ${(err as Error).message}`)
+      this.client = client
     }
-    this.client = client
+    // Connection setup is read-only. Some hosted gateways intermittently
+    // reject a valid API key; each attempt gets a fresh HTTP transport. Keep
+    // the recovery bounded in code rather than letting callers spin forever.
+    const maxAttempts = this.endpoint.transport ? 1 : 3
+    let lastError: unknown
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await connectClient()
+        return
+      } catch (err) {
+        lastError = err
+        if (!isInvalidTokenError(err)) break
+      }
+    }
+    throw new Error(`${this.label}: cannot connect to MCP server ${this.endpoint.url} — ${(lastError as Error).message}`)
   }
 
   private async names(): Promise<Set<string>> {

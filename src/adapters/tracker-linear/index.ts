@@ -206,7 +206,7 @@ export class LinearTracker implements TicketTracker {
     let after: string | null = null
     for (let page = 0; page < 5; page++) {
       const data: IssuesPage = await this.gql<IssuesPage>(
-        `query($teamId: String!, $after: String) {
+        `query($teamId: ID!, $after: String) {
           issues(first: 50, after: $after, filter: { team: { id: { eq: $teamId } } }, orderBy: updatedAt) {
             nodes { ${ISSUE_FIELDS} }
             pageInfo { hasNextPage endCursor }
