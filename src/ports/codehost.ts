@@ -26,5 +26,8 @@ export interface CodeHost {
   /** The tester's approval lands here. Merge stays human-only. */
   review(number: number, verdict: "approve" | "comment", body: string): Promise<void>
 
+  /** The human's signature — squash-merge a delivered PR. Only ever called from a human action. */
+  merge(number: number): Promise<void>
+
   comment(number: number, body: string): Promise<void>
 }

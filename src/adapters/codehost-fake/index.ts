@@ -64,6 +64,13 @@ export class FakeCodeHost implements CodeHost {
     if (verdict === "approve") pr.reviewDecision = "approved"
   }
 
+  async merge(number: number): Promise<void> {
+    this.calls.push({ op: "merge", args: [number] })
+    const pr = this.prs.get(number)
+    if (!pr) throw new Error(`fake codehost: no PR #${number}`)
+    pr.state = "merged"
+  }
+
   async comment(number: number, body: string): Promise<void> {
     this.calls.push({ op: "comment", args: [number, body] })
   }

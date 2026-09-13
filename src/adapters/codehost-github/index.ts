@@ -129,7 +129,21 @@ export class GitHubCodeHost implements CodeHost {
 
   async review(number: number, verdict: "approve" | "comment", body: string): Promise<void> {
     const flag = verdict === "approve" ? "--approve" : "--comment"
-    await this.gh(["pr", "review", String(number), ...this.repoArgs(), flag, "--body", body])
+    try {
+      await this.gh(["pr", "review", String(number), ...this.repoArgs(), flag, "--body", body])
+    } catch (err) {
+      // Single-account setups: the conductor authors the PR with the same gh
+      // identity that reviews it, and GitHub forbids self-approval. Degrade to
+      // a comment review — the tester's evidence still lands on the PR and the
+      // gate stays informational; the merge remains the human's act.
+      if (!(err instanceof Error) || !err.message.includes("Can not approve your own pull request")) throw err
+      await this.gh(["pr", "review", String(number), ...this.repoArgs(), "--comment", "--body",
+        `⚠️ self-approval not permitted (PR author == reviewer identity). Evidence recorded as a comment instead.\n\n${body}`])
+    }
+  }
+
+  async merge(number: number): Promise<void> {
+    await this.gh(["pr", "merge", String(number), ...this.repoArgs(), "--squash"])
   }
 
   async comment(number: number, body: string): Promise<void> {
