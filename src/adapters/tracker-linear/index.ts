@@ -40,10 +40,52 @@ export interface LinearOptions {
   team: string
   /** Logical marker → selector map from config (e.g. { selected: "label:sdlc-selected", ... }). */
   map: Record<string, string>
+  /** Injectable transport (tests); defaults to global fetch. */
+  fetch?: (url: string, init: RequestInit) => Promise<Response>
+  /** Injectable sleep for rate-limit backoff (tests). */
+  delay?: (ms: number) => Promise<void>
+  /** Retry/backoff progress sink — wire the logger here. */
+  warn?: (message: string) => void
 }
 
-interface GqlError extends Error {
-  response?: unknown
+/** GraphQL error payload shape we read (tolerant — body may be absent or non-JSON). */
+interface GqlBody<T> {
+  data?: T
+  errors?: { message: string; extensions?: { code?: string } }[]
+}
+
+/** Linear signals "you are throttled" as HTTP 429 or a RATELIMITED error extension. */
+function isRateLimited(res: Response, body: GqlBody<unknown> | undefined): boolean {
+  if (res.status === 429) return true
+  return Boolean(body?.errors?.some((e) => e.extensions?.code?.toUpperCase() === "RATELIMITED"))
+}
+
+const MAX_ATTEMPTS = 3
+const BACKOFF_BASE_MS = 2_000
+const BACKOFF_CAP_MS = 30_000
+/** A declared wait is honored up to one Linear minute-window; beyond that we give up this call. */
+const HEADER_WAIT_CAP_MS = 60_000
+
+/** Server-declared wait: Retry-After (seconds) or rate-limit reset headers (epoch ms). */
+function declaredWaitMs(res: Response): number | undefined {
+  const retryAfter = Number(res.headers.get("retry-after"))
+  if (Number.isFinite(retryAfter) && retryAfter > 0) return Math.min(retryAfter * 1000, HEADER_WAIT_CAP_MS)
+  for (const header of ["x-ratelimit-requests-reset", "x-ratelimit-complexity-reset"]) {
+    const reset = Number(res.headers.get(header))
+    if (Number.isFinite(reset) && reset > 0) {
+      const wait = reset - Date.now()
+      if (wait > 0) return Math.min(wait, HEADER_WAIT_CAP_MS)
+    }
+  }
+  return undefined
+}
+
+/** Human-readable rate-limit failure for escalation comments. */
+function rateLimitError(res: Response): string {
+  const remaining = res.headers.get("x-ratelimit-requests-remaining")
+  const reset = Number(res.headers.get("x-ratelimit-requests-reset"))
+  const resetIn = Number.isFinite(reset) && reset > 0 ? `${Math.max(0, Math.round((reset - Date.now()) / 1000))}s` : "unknown"
+  return `Linear rate limit exhausted (RATELIMITED, requests remaining: ${remaining ?? "?"}, window resets in ${resetIn})`
 }
 
 /**
@@ -53,6 +95,8 @@ interface GqlError extends Error {
  */
 export class LinearTracker implements TicketTracker {
   private readonly apiKey: string
+  private readonly fetchImpl: (url: string, init: RequestInit) => Promise<Response>
+  private readonly delay: (ms: number) => Promise<void>
   private ws?: WorkspaceMap
   private teamId?: string
   private readonly idCache = new Map<string, string>()
@@ -62,30 +106,42 @@ export class LinearTracker implements TicketTracker {
     if (!this.apiKey) {
       throw new Error("Linear adapter: LINEAR_API_KEY is missing (set it in the environment or .env)")
     }
+    this.fetchImpl = opts.fetch ?? ((url, init) => fetch(url, init))
+    this.delay = opts.delay ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)))
   }
 
   private async gql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
-    let res: Response
-    try {
-      res = await fetch(API, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: this.apiKey,
-        },
-        body: JSON.stringify({ query, variables }),
-      })
-    } catch (err) {
-      throw new Error(`Linear API unreachable: ${(err as Error).message}`)
+    for (let attempt = 1; ; attempt++) {
+      let res: Response
+      try {
+        res = await this.fetchImpl(API, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: this.apiKey,
+          },
+          body: JSON.stringify({ query, variables }),
+        })
+      } catch (err) {
+        throw new Error(`Linear API unreachable: ${(err as Error).message}`)
+      }
+      const body = (await res.json().catch(() => undefined)) as GqlBody<T> | undefined
+      if (isRateLimited(res, body)) {
+        // Writes are safe to retry: a RATELIMITED response means the call never
+        // executed. Bounded in code — 3 attempts, declared wait honored up to a
+        // minute-window, else exponential 2s → 4s.
+        if (attempt >= MAX_ATTEMPTS) throw new Error(rateLimitError(res))
+        const waitMs = declaredWaitMs(res) ?? Math.min(BACKOFF_BASE_MS * 2 ** (attempt - 1), BACKOFF_CAP_MS)
+        this.opts.warn?.(`Linear rate limited — retry ${attempt}/${MAX_ATTEMPTS - 1} in ${Math.round(waitMs / 1000)}s`)
+        await this.delay(waitMs)
+        continue
+      }
+      if (!res.ok || body?.errors?.length) {
+        const messages = body?.errors?.map((e) => e.message).join("; ") ?? `HTTP ${res.status}`
+        throw new Error(`Linear API error: ${messages}`)
+      }
+      return body!.data as T
     }
-    const body = (await res.json()) as { data?: T; errors?: { message: string }[] }
-    if (!res.ok || body.errors?.length) {
-      const messages = body.errors?.map((e) => e.message).join("; ") ?? `HTTP ${res.status}`
-      const err = new Error(`Linear API error: ${messages}`) as GqlError
-      err.response = body
-      throw err
-    }
-    return body.data as T
   }
 
   private async requireTeamId(): Promise<string> {
@@ -200,24 +256,61 @@ export class LinearTracker implements TicketTracker {
     }
   }
 
+  private stateNameForLogical(state: LogicalState): string | undefined {
+    for (const [name, logical] of Object.entries(this.ws?.stateNameToLogical ?? {})) {
+      if (logical === state) return name
+    }
+    return undefined
+  }
+
   async listIssues(query: IssueQuery): Promise<Ticket[]> {
+    // Discovery supplies the concrete names the server-side filters need and
+    // validates the mapping — one extra call at most, cached for the process.
+    if (!this.ws) await this.discoverWorkspace()
     const teamId = await this.requireTeamId()
+
+    const decls = ["$teamId: ID!", "$after: String"]
+    const parts = ["team: { id: { eq: $teamId } }"]
+    const vars: Record<string, unknown> = { teamId, after: null }
+    if (query.logicalLabel) {
+      decls.push("$labelNames: [String!]")
+      parts.push("labels: { name: { in: $labelNames } }")
+      vars["labelNames"] = [this.labelNameFor(query.logicalLabel)]
+    }
+    if (query.state) {
+      const stateName = this.stateNameForLogical(query.state)
+      if (stateName) {
+        decls.push("$stateName: String")
+        parts.push("state: { name: { eq: $stateName } }")
+        vars["stateName"] = stateName
+      }
+    }
+    if (query.project) {
+      decls.push("$projectName: String")
+      parts.push("project: { name: { eq: $projectName } }")
+      vars["projectName"] = query.project
+    }
+
     const selected: Ticket[] = []
     let after: string | null = null
     for (let page = 0; page < 5; page++) {
+      vars["after"] = after
       const data: IssuesPage = await this.gql<IssuesPage>(
-        `query($teamId: ID!, $after: String) {
-          issues(first: 50, after: $after, filter: { team: { id: { eq: $teamId } } }, orderBy: updatedAt) {
+        `query(${decls.join(", ")}) {
+          issues(first: 50, after: $after, filter: { ${parts.join(", ")} }, orderBy: updatedAt) {
             nodes { ${ISSUE_FIELDS} }
             pageInfo { hasNextPage endCursor }
           }
         }`,
-        { teamId, after },
+        vars,
       )
       selected.push(...data.issues.nodes.map((n: LinearIssueRaw) => this.normalize(n)))
       if (!data.issues.pageInfo.hasNextPage) break
       after = data.issues.pageInfo.endCursor
     }
+    // Client-side filters stay as defense-in-depth: the server filter protects
+    // the request quota, the local pass guarantees the contract even if a
+    // server ignores or drifts on a filter argument.
     const labelName = query.logicalLabel ? this.labelNameFor(query.logicalLabel) : undefined
     return selected
       .filter((t) => (labelName ? t.labels.includes(labelName) : true))

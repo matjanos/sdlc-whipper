@@ -54,7 +54,7 @@ export function createDeps(config: ResolvedConfig, log: Logger, overrides: DepsO
   const tracker: TicketTracker =
     overrides.tracker ??
     (raw.adapters.tracker === "linear"
-      ? new LinearTracker({ team: raw.tracker.team, map: raw.tracker.map })
+      ? new LinearTracker({ team: raw.tracker.team, map: raw.tracker.map, warn: (m) => log.warn(`linear: ${m}`) })
       : raw.adapters.tracker === "linear-mcp"
         ? new LinearMcpTracker({ team: raw.tracker.team, project: raw.tracker.project, map: raw.tracker.map })
         : new FakeTracker())
